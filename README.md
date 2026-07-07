@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # WAACT - WhatsApp Automation System (نظام أتمتة الواتساب الذكي)
 
 Current release: MVP V1.3
@@ -306,3 +307,7 @@ waact/
 - [ ] **Audit Log** - Full system audit trail
 - [ ] **Rate Limiting** - Anti-spam protection
 - [ ] **Message Templates** - Pre-approved WhatsApp templates
+=======
+# waact
+waact
+>>>>>>> d057a795153e9a137eb2658965662836ce6c24be
