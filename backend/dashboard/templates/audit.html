@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Audit Log{% endblock %}
+{% block heading %}سجل العمليات{% endblock %}
+
+{% block content %}
+<div class="detail-card">
+    <h2>آخر 200 عملية</h2>
+    <table>
+        <thead><tr><th>الوقت</th><th>المستخدم</th><th>Action</th><th>Entity</th><th>IP</th><th>Details</th></tr></thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>{{ log.username or '-' }}</td>
+                <td><span class="status status-new">{{ log.action }}</span></td>
+                <td>{{ log.entity_type or '-' }} / {{ log.entity_id or '-' }}</td>
+                <td class="text-muted">{{ log.ip_address or '-' }}</td>
+                <td style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" dir="ltr">{{ log.details or {} }}</td>
+            </tr>
+            {% endfor %}
+            {% if not logs %}<tr><td colspan="6" class="text-center text-muted" style="padding:40px">لا توجد عمليات بعد</td></tr>{% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

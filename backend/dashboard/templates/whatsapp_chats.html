@@ -1,0 +1,657 @@
+{% extends "base.html" %}
+{% block title %}محادثات الواتساب{% endblock %}
+{% block heading %}جميع محادثات الواتساب المباشرة{% endblock %}
+
+{% block content %}
+<div class="wa-chat-shell">
+    <aside class="wa-chat-list-panel">
+        <div class="wa-search-box">
+            <input type="text" id="chatSearch" placeholder="ابحث عن محادثة...">
+        </div>
+        <div id="chatList">
+            <div class="wa-empty">جاري التحميل...</div>
+        </div>
+    </aside>
+
+    <section class="wa-thread-panel">
+        <div id="chatHeader" class="wa-thread-header" style="display:none">
+            <div>
+                <h3 id="chatName"></h3>
+                <span id="chatMeta"></span>
+            </div>
+            <div class="ai-actions">
+                <button type="button" onclick="runAssist('suggest_reply')">اقترح رد</button>
+                <button type="button" onclick="runAssist('summary')">لخص</button>
+                <button type="button" onclick="runAssist('extract_lead')">استخرج Lead</button>
+            </div>
+        </div>
+        <div id="assistPanel" class="assist-panel" style="display:none"></div>
+        <div id="metaPanel" class="meta-panel" style="display:none"></div>
+        <div id="radiusPanel" class="radius-panel" style="display:none"></div>
+        <div id="routerPanel" class="router-panel" style="display:none"></div>
+        <div id="messagesContainer" class="wa-messages">
+            <div class="wa-empty wa-empty-large">
+                <div class="wa-empty-icon">💬</div>
+                <div>اختر محادثة من القائمة لعرض الرسائل</div>
+                <div class="wa-empty-sub">يتم جلب المحادثات مباشرة من WhatsApp Web</div>
+            </div>
+        </div>
+        <form id="sendForm" class="wa-composer" style="display:none">
+            <textarea id="messageInput" rows="1" placeholder="اكتب رسالة..."></textarea>
+            <button type="submit">إرسال</button>
+        </form>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .wa-chat-shell { display:flex; gap:20px; height:72vh; min-height:560px; }
+    .wa-chat-list-panel, .wa-thread-panel { background:#1a1a2e; border:1px solid #2a2a4a; border-radius:12px; overflow:hidden; }
+    .wa-chat-list-panel { flex:0 0 380px; display:flex; flex-direction:column; }
+    .wa-thread-panel { flex:1; display:flex; flex-direction:column; }
+    .wa-search-box { padding:15px; border-bottom:1px solid #2a2a4a; }
+    .wa-search-box input { width:100%; padding:10px 12px; background:#16162b; border:1px solid #2a2a4a; border-radius:8px; color:#fff; font-size:13px; }
+    #chatList { overflow-y:auto; flex:1; }
+    .wa-chat-item { width:100%; display:block; text-align:right; background:transparent; border:0; color:inherit; padding:13px 15px; border-bottom:1px solid #2a2a4a; cursor:pointer; transition:background .2s; }
+    .wa-chat-item:hover { background:#16162b; }
+    .wa-chat-item.active { background:#173142; border-right:3px solid #00d4aa; }
+    .wa-chat-top { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .wa-chat-name { color:#fff; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .wa-chat-time { color:#777; font-size:11px; white-space:nowrap; }
+    .wa-chat-preview { color:#8b8ba5; font-size:12px; margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .wa-chat-badge { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; border-radius:12px; background:#00d4aa; color:#06130f; font-size:11px; font-weight:700; margin-left:6px; }
+    .wa-thread-header { padding:16px 20px; border-bottom:1px solid #2a2a4a; display:flex; justify-content:space-between; gap:12px; align-items:center; }
+    .wa-thread-header h3 { color:#fff; font-size:17px; margin:0; }
+    .wa-thread-header span { display:block; color:#777; font-size:12px; margin-top:4px; }
+    .ai-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .ai-actions button { border:1px solid #24584d; color:#00d4aa; background:#00d4aa10; border-radius:8px; padding:7px 10px; cursor:pointer; font-size:12px; }
+    .ai-actions button:hover { background:#00d4aa22; }
+    .assist-panel { border-bottom:1px solid #2a2a4a; background:#101020; color:#e8e8f0; padding:12px 16px; font-size:13px; line-height:1.7; white-space:pre-wrap; }
+    .assist-panel .assist-meta { color:#888; font-size:11px; margin-top:8px; }
+    .assist-panel .assist-use { margin-top:10px; border:0; border-radius:8px; background:#00d4aa; color:#06130f; padding:7px 10px; cursor:pointer; font-weight:700; }
+    .assist-feedback { margin-top:10px; display:flex; align-items:center; gap:8px; color:#888; font-size:12px; }
+    .assist-feedback button { border:1px solid #2a2a4a; background:#151528; color:#ddd; border-radius:7px; padding:5px 8px; cursor:pointer; }
+    .assist-feedback button:hover { border-color:#00d4aa; color:#00d4aa; }
+    .meta-panel { border-bottom:1px solid #2a2a4a; background:#141426; padding:12px 16px; }
+    .radius-panel { border-bottom:1px solid #2a2a4a; background:#101b26; padding:12px 16px; color:#dcefff; font-size:12px; }
+    .router-panel { border-bottom:1px solid #2a2a4a; background:#182113; padding:12px 16px; color:#e8ffd8; font-size:12px; }
+    .radius-grid { display:grid; grid-template-columns:repeat(6, minmax(90px, 1fr)); gap:8px; align-items:stretch; }
+    .router-grid { display:grid; grid-template-columns:repeat(5, minmax(90px, 1fr)); gap:8px; align-items:stretch; }
+    .radius-item { background:#13283a; border:1px solid #21445f; border-radius:10px; padding:8px; min-width:0; }
+    .router-item { background:#203018; border:1px solid #35552c; border-radius:10px; padding:8px; min-width:0; }
+    .radius-item span { display:block; color:#8bb7d6; font-size:10px; margin-bottom:4px; }
+    .router-item span { display:block; color:#a8d096; font-size:10px; margin-bottom:4px; }
+    .radius-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:10px; }
+    .router-actions-panel { display:flex; gap:7px; flex-wrap:wrap; margin-top:10px; }
+    .radius-actions button { border:1px solid #24584d; background:#00d4aa14; color:#00d4aa; border-radius:8px; padding:7px 10px; cursor:pointer; font-size:12px; }
+    .router-actions-panel button { border:1px solid #456a36; background:#9cff6f14; color:#b8ff9b; border-radius:8px; padding:7px 10px; cursor:pointer; font-size:12px; }
+    .meta-grid { display:grid; grid-template-columns:120px 1fr 90px 1fr 80px 1fr auto; gap:8px; align-items:center; }
+    .meta-grid label { color:#888; font-size:12px; }
+    .meta-grid select, .meta-grid input { padding:7px 8px; background:#0f0f1a; color:#fff; border:1px solid #2a2a4a; border-radius:8px; font-size:12px; }
+    .meta-grid button, .notes-box button { border:0; border-radius:8px; background:#00d4aa; color:#06130f; padding:8px 10px; cursor:pointer; font-weight:700; }
+    .notes-box { margin-top:10px; display:grid; grid-template-columns:1fr auto; gap:8px; }
+    .notes-box textarea { resize:vertical; min-height:42px; max-height:100px; padding:8px; border-radius:8px; background:#0f0f1a; color:#fff; border:1px solid #2a2a4a; }
+    .notes-list { margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; }
+    .note-pill { background:#1a1a2e; border:1px solid #2a2a4a; border-radius:999px; padding:5px 9px; color:#bbb; font-size:11px; }
+    .wa-messages { flex:1; padding:18px 20px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; background:linear-gradient(180deg,#171729 0%,#131322 100%); }
+    .wa-msg-row { display:flex; width:100%; }
+    .wa-msg-row.mine { justify-content:flex-start; }
+    .wa-msg-row.theirs { justify-content:flex-end; }
+    .wa-msg-wrap { max-width:min(76%,620px); }
+    .wa-msg-bubble { padding:9px 12px; border-radius:13px; font-size:14px; line-height:1.55; box-shadow:0 8px 20px rgba(0,0,0,.12); overflow:hidden; }
+    .wa-msg-row.mine .wa-msg-bubble { background:#174130; color:#fff; border-bottom-left-radius:5px; }
+    .wa-msg-row.theirs .wa-msg-bubble { background:#2a2a4a; color:#e5e5ef; border-bottom-right-radius:5px; }
+    .wa-msg-text { white-space:pre-wrap; word-break:break-word; unicode-bidi:plaintext; }
+    .wa-msg-time { font-size:10px; color:#777; margin-top:4px; }
+    .wa-msg-row.mine .wa-msg-time { text-align:left; }
+    .wa-msg-row.theirs .wa-msg-time { text-align:right; }
+    .wa-media-image { display:block; max-width:320px; max-height:360px; min-width:120px; min-height:80px; border-radius:10px; object-fit:cover; margin-bottom:7px; cursor:pointer; background:#111827; }
+    .wa-media-video { display:block; max-width:360px; max-height:360px; border-radius:10px; margin-bottom:7px; }
+    .wa-media-audio { width:280px; max-width:100%; margin:3px 0; }
+    .wa-media-file, .wa-media-placeholder { display:flex; align-items:center; gap:9px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px 12px; color:#fff; text-decoration:none; margin-bottom:7px; }
+    .wa-media-file:hover { background:rgba(255,255,255,.12); }
+    .wa-media-icon { width:30px; height:30px; border-radius:8px; background:#00d4aa22; color:#00d4aa; display:flex; align-items:center; justify-content:center; font-weight:700; }
+    .wa-composer { display:flex; gap:10px; align-items:flex-end; padding:14px; border-top:1px solid #2a2a4a; background:#16162b; }
+    .wa-composer textarea { flex:1; resize:none; max-height:120px; min-height:42px; padding:11px 12px; border-radius:10px; border:1px solid #2a2a4a; background:#0f0f1a; color:#fff; line-height:1.5; font-size:14px; }
+    .wa-composer button { border:0; border-radius:10px; background:#00d4aa; color:#06130f; padding:12px 18px; font-weight:700; cursor:pointer; }
+    .wa-composer button:disabled { opacity:.5; cursor:not-allowed; }
+    .wa-empty { padding:40px 20px; text-align:center; color:#888; }
+    .wa-empty-large { margin:auto; }
+    .wa-empty-icon { font-size:38px; margin-bottom:14px; }
+    .wa-empty-sub { font-size:12px; margin-top:8px; color:#666; }
+    @media (max-width: 900px) {
+        .wa-chat-shell { flex-direction:column; height:auto; min-height:0; gap:12px; }
+        .wa-chat-list-panel { flex:0 0 auto; max-height:300px; width:100%; }
+        .wa-thread-panel { min-height:520px; }
+        .wa-thread-header { flex-direction:column; align-items:stretch; padding:14px; }
+        .ai-actions { display:grid; grid-template-columns:repeat(3, 1fr); gap:7px; }
+        .wa-msg-wrap { max-width:92%; }
+        .meta-grid { grid-template-columns:1fr !important; }
+        .radius-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+        .router-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+        .notes-box { grid-template-columns:1fr; }
+        .assist-feedback { flex-wrap:wrap; }
+    }
+    @media (max-width: 520px) {
+        .wa-thread-panel { min-height:500px; }
+        .wa-messages { padding:12px; }
+        .wa-msg-wrap { max-width:96%; }
+        .wa-media-image, .wa-media-video { max-width:100%; max-height:300px; }
+        .wa-composer { padding:10px; gap:8px; }
+        .wa-composer button { padding:11px 12px; flex:0 0 auto; }
+        .ai-actions { grid-template-columns:1fr; }
+        .radius-grid { grid-template-columns:1fr; }
+        .router-grid { grid-template-columns:1fr; }
+        .radius-actions { flex-direction:column; }
+        .router-actions-panel { flex-direction:column; }
+    }
+</style>
+<script>
+var allChats = [];
+var selectedChatId = null;
+var selectedChat = null;
+var currentMessages = [];
+var currentMeta = null;
+
+function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(text || ''));
+    return div.innerHTML;
+}
+
+function timeAgo(ts) {
+    if (!ts) return '';
+    var diff = Math.floor(Date.now() / 1000) - ts;
+    if (diff < 60) return 'الآن';
+    if (diff < 3600) return Math.floor(diff / 60) + 'د';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'س';
+    return Math.floor(diff / 86400) + 'ي';
+}
+
+function formatTime(ts) {
+    if (!ts) return '';
+    var d = new Date(ts * 1000);
+    return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+}
+
+function mediaLabel(type) {
+    var labels = {
+        image: 'صورة',
+        video: 'فيديو',
+        audio: 'رسالة صوتية',
+        ptt: 'رسالة صوتية',
+        document: 'ملف',
+        sticker: 'ملصق',
+    };
+    return labels[type] || 'وسائط';
+}
+
+function isPlaceholder(body, type) {
+    var text = (body || '').trim();
+    if (!text) return true;
+    if (type && text.toLowerCase() === '[' + String(type).toLowerCase() + ']') return true;
+    return /^\[(ptt|image|video|audio|document|sticker|media|وسائط|ملف وسائط)\]$/i.test(text);
+}
+
+function loadChats() {
+    fetch('/api/whatsapp/chats')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var container = document.getElementById('chatList');
+            if (data.error) {
+                container.innerHTML = '<div class="wa-empty">الموصل غير متصل<br><span class="wa-empty-sub">شغّل WhatsApp Connector أولاً</span></div>';
+                return;
+            }
+            allChats = data.chats || [];
+            renderChats(allChats);
+        })
+        .catch(function() {
+            document.getElementById('chatList').innerHTML = '<div class="wa-empty">فشل تحميل المحادثات</div>';
+        });
+}
+
+function renderChats(chats) {
+    var container = document.getElementById('chatList');
+    if (!chats.length) {
+        container.innerHTML = '<div class="wa-empty">لا توجد محادثات</div>';
+        return;
+    }
+
+    container.innerHTML = chats.map(function(c) {
+        var last = c.lastMessage || null;
+        var preview = last ? (last.preview || last.body || mediaLabel(last.type)) : '';
+        var unread = c.unreadCount > 0 ? '<span class="wa-chat-badge">' + c.unreadCount + '</span>' : '';
+        var group = c.isGroup ? ' · مجموعة' : '';
+        var active = c.id === selectedChatId ? ' active' : '';
+        return '<button type="button" class="wa-chat-item' + active + '" data-id="' + escapeHtml(c.id) + '">' +
+            '<div class="wa-chat-top"><span class="wa-chat-name">' + unread + escapeHtml(c.name || c.phone) + '</span><span class="wa-chat-time">' + timeAgo(c.timestamp) + '</span></div>' +
+            '<div class="wa-chat-preview">' + escapeHtml(preview) + group + '</div>' +
+            '</button>';
+    }).join('');
+
+    container.querySelectorAll('.wa-chat-item').forEach(function(el) {
+        el.addEventListener('click', function() {
+            var chat = allChats.find(function(c) { return c.id === el.dataset.id; });
+            openChat(el.dataset.id, chat ? chat.name : el.dataset.id, chat || null);
+        });
+    });
+}
+
+function openChat(chatId, chatName, chat) {
+    selectedChatId = chatId;
+    selectedChat = chat;
+    renderChats(allChats.filter(filterBySearch));
+
+    document.getElementById('chatHeader').style.display = 'flex';
+    document.getElementById('sendForm').style.display = 'flex';
+    document.getElementById('chatName').textContent = chatName;
+    document.getElementById('chatMeta').textContent = chat ? ((chat.isGroup ? 'مجموعة' : chat.phone) || '') : '';
+    document.getElementById('messagesContainer').innerHTML = '<div class="wa-empty">جاري تحميل الرسائل والميديا...</div>';
+    loadChatMeta(chatId);
+    loadRadiusPanel(chatId, chat || null);
+    loadRouterPanel(chatId, chat || null);
+
+    fetch('/api/whatsapp/chats/' + encodeURIComponent(chatId) + '/messages?limit=50')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var container = document.getElementById('messagesContainer');
+            if (data.error || !data.messages) {
+                container.innerHTML = '<div class="wa-empty">فشل تحميل الرسائل</div>';
+                return;
+            }
+            if (!data.messages.length) {
+                container.innerHTML = '<div class="wa-empty">لا توجد رسائل</div>';
+                currentMessages = [];
+                return;
+            }
+            currentMessages = data.messages;
+            container.innerHTML = data.messages.map(renderMessage).join('');
+            container.scrollTop = container.scrollHeight;
+        })
+        .catch(function() {
+            document.getElementById('messagesContainer').innerHTML = '<div class="wa-empty">فشل تحميل الرسائل</div>';
+        });
+}
+
+function chatPhone(chatId, chat) {
+    if (chat && chat.phone) return String(chat.phone).replace(/\D/g, '');
+    if (chatId && chatId.indexOf('@c.us') > -1) return chatId.split('@')[0].replace(/\D/g, '');
+    return '';
+}
+
+function loadRadiusPanel(chatId, chat) {
+    var panel = document.getElementById('radiusPanel');
+    var phone = chatPhone(chatId, chat);
+    if (!phone) {
+        panel.style.display = 'none';
+        return;
+    }
+    panel.style.display = 'block';
+    panel.innerHTML = 'جاري تحميل بيانات Radius...';
+    fetch('/api/radius/lookup?phone=' + encodeURIComponent(phone))
+        .then(function(r) { return r.json(); })
+        .then(function(data) { renderRadiusPanel(phone, data); })
+        .catch(function(e) { panel.innerHTML = 'Radius غير متاح: ' + escapeHtml(e.message); });
+}
+
+function loadRouterPanel(chatId, chat) {
+    var panel = document.getElementById('routerPanel');
+    var phone = chatPhone(chatId, chat);
+    if (!phone) {
+        panel.style.display = 'none';
+        return;
+    }
+    panel.style.display = 'block';
+    panel.innerHTML = 'جاري تحميل بيانات الراوتر...';
+    fetch('/api/routers/lookup?phone=' + encodeURIComponent(phone))
+        .then(function(r) { return r.json(); })
+        .then(function(data) { renderRouterPanel(phone, data); })
+        .catch(function(e) { panel.innerHTML = 'Router غير متاح: ' + escapeHtml(e.message); });
+}
+
+function renderRouterPanel(phone, data) {
+    var panel = document.getElementById('routerPanel');
+    var r = data.router || null;
+    panel.dataset.routerPhone = phone;
+    if (!r) {
+        panel.innerHTML = 'لا يوجد راوتر مربوط بهذا العميل. يمكنك ربطه من صفحة Routers.';
+        return;
+    }
+    panel.innerHTML = '<div class="router-grid">' +
+        '<div class="router-item"><span>Router</span><strong>' + escapeHtml(r.name || '-') + '</strong></div>' +
+        '<div class="router-item"><span>Protocol</span><strong>' + escapeHtml(r.protocol || '-') + '</strong></div>' +
+        '<div class="router-item"><span>Host</span><strong dir="ltr">' + escapeHtml(r.host || '-') + '</strong></div>' +
+        '<div class="router-item"><span>SSID</span><strong>' + escapeHtml(r.ssid || '-') + '</strong></div>' +
+        '<div class="router-item"><span>Status</span><strong>' + escapeHtml(r.last_status || (r.enabled ? 'enabled' : 'disabled')) + '</strong></div>' +
+        '</div><div class="router-actions-panel"><button type="button" onclick="loadRouterPanel(selectedChatId, selectedChat)">Refresh Router</button><button type="button" onclick="changeRouterWifiFromInbox()">تغيير باسورد الواي فاي</button></div>';
+}
+
+function changeRouterWifiFromInbox() {
+    var panel = document.getElementById('routerPanel');
+    var phone = panel.dataset.routerPhone || chatPhone(selectedChatId, selectedChat);
+    if (!phone) return;
+    var password = prompt('اكتب باسورد الواي فاي الجديد');
+    if (!password) return;
+    if (!confirm('تأكيد تغيير باسورد الواي فاي؟')) return;
+    fetch('/api/routers/change-wifi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone, new_password: password }),
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        alert(data.success ? 'تم تغيير الباسورد' : ('فشل: ' + (data.message || data.error || 'غير معروف')));
+        loadRouterPanel(selectedChatId, selectedChat);
+    }).catch(function(e) { alert(e.message); });
+}
+
+function renderRadiusPanel(phone, data) {
+    var panel = document.getElementById('radiusPanel');
+    var s = data.snapshot || null;
+    if (s) {
+        var expiry = s.expires_at ? new Date(s.expires_at).toLocaleDateString('ar-EG') : '-';
+        panel.innerHTML = '<div class="radius-grid">' +
+            '<div class="radius-item"><span>Username</span><strong dir="ltr">' + escapeHtml(s.username || s.external_id || '-') + '</strong></div>' +
+            '<div class="radius-item"><span>Status</span><strong>' + escapeHtml(s.status || '-') + '</strong></div>' +
+            '<div class="radius-item"><span>Package</span><strong>' + escapeHtml(s.package || '-') + '</strong></div>' +
+            '<div class="radius-item"><span>Expiry</span><strong>' + escapeHtml(expiry) + '</strong></div>' +
+            '<div class="radius-item"><span>Online</span><strong>' + (s.online ? 'online' : 'offline') + '</strong></div>' +
+            '<div class="radius-item"><span>IP</span><strong dir="ltr">' + escapeHtml(s.ip_address || '-') + '</strong></div>' +
+            '</div><div class="radius-actions"><button type="button" onclick="loadRadiusPanel(selectedChatId, selectedChat)">Refresh Radius</button><button type="button" onclick="sendRadiusRenewal()">إرسال رسالة تجديد</button></div>';
+        panel.dataset.renewalPhone = phone;
+        return;
+    }
+    var candidates = data.candidates || [];
+    if (candidates.length) {
+        panel.innerHTML = '<div>وجدت حسابات Radius محتملة. اختر للربط بهذا الشات:</div>' + candidates.slice(0, 3).map(function(c, idx) {
+            return '<div class="radius-actions"><button type="button" onclick="linkRadiusCandidate(' + idx + ')">' + escapeHtml(c.username || c.external_id || '-') + ' · ' + escapeHtml(c.status || '-') + '</button></div>';
+        }).join('');
+        panel.dataset.candidates = JSON.stringify(candidates.slice(0, 3));
+        panel.dataset.renewalPhone = phone;
+        return;
+    }
+    panel.innerHTML = data.error ? ('Radius غير متاح: ' + escapeHtml(data.error)) : 'لا يوجد حساب Radius مربوط بهذا الرقم.';
+    panel.dataset.renewalPhone = phone;
+}
+
+function linkRadiusCandidate(index) {
+    var panel = document.getElementById('radiusPanel');
+    var candidates = JSON.parse(panel.dataset.candidates || '[]');
+    var subscriber = candidates[index];
+    var phone = panel.dataset.renewalPhone || chatPhone(selectedChatId, selectedChat);
+    if (!subscriber || !phone) return;
+    fetch('/api/radius/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone, subscriber: subscriber }),
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.success) throw new Error(data.error || 'فشل الربط');
+        renderRadiusPanel(phone, data);
+    }).catch(function(e) { alert(e.message); });
+}
+
+function sendRadiusRenewal() {
+    var panel = document.getElementById('radiusPanel');
+    var phone = panel.dataset.renewalPhone || chatPhone(selectedChatId, selectedChat);
+    if (!phone) return;
+    fetch('/api/radius/send-renewal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone }),
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        alert(data.success ? 'تم إرسال رسالة التجديد' : ('فشل الإرسال: ' + (data.error || '')));
+    }).catch(function(e) { alert(e.message); });
+}
+
+function loadChatMeta(chatId) {
+    fetch('/api/inbox/meta/' + encodeURIComponent(chatId))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            currentMeta = data;
+            renderMetaPanel(data);
+        })
+        .catch(function() {
+            document.getElementById('metaPanel').style.display = 'none';
+        });
+}
+
+function renderMetaPanel(data) {
+    var panel = document.getElementById('metaPanel');
+    var meta = data.meta || {};
+    var users = data.users || [];
+    var notes = data.notes || [];
+    panel.style.display = 'block';
+    var userOptions = '<option value="">غير مسند</option>' + users.map(function(u) {
+        return '<option value="' + u.id + '" ' + (u.id === meta.assigned_user_id ? 'selected' : '') + '>' + escapeHtml(u.username) + ' (' + escapeHtml(u.role) + ')</option>';
+    }).join('');
+    var noteHtml = notes.slice(0, 5).map(function(n) {
+        return '<span class="note-pill">' + escapeHtml(n.username || '-') + ': ' + escapeHtml(n.note).slice(0, 80) + '</span>';
+    }).join('');
+    panel.innerHTML = '<div class="meta-grid">' +
+        '<label>الحالة</label><select id="metaStatus"><option value="open">open</option><option value="pending">pending</option><option value="resolved">resolved</option><option value="spam">spam</option></select>' +
+        '<label>المسؤول</label><select id="metaAssigned">' + userOptions + '</select>' +
+        '<label>الأولوية</label><select id="metaPriority"><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select>' +
+        '<button onclick="saveChatMeta()">حفظ</button>' +
+        '</div>' +
+        '<div class="meta-grid" style="grid-template-columns:120px 1fr;margin-top:8px"><label>Tags</label><input id="metaTags" placeholder="hot, quote, vip" value="' + escapeHtml(meta.tags || '') + '"></div>' +
+        '<div class="notes-box"><textarea id="newNote" placeholder="ملاحظة داخلية لا تظهر للعميل"></textarea><button onclick="addInternalNote()">إضافة ملاحظة</button></div>' +
+        '<div class="notes-list">' + noteHtml + '</div>';
+    document.getElementById('metaStatus').value = meta.status || 'open';
+    document.getElementById('metaPriority').value = meta.priority || 'medium';
+}
+
+function saveChatMeta() {
+    if (!selectedChatId) return;
+    fetch('/api/inbox/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chat_id: selectedChatId,
+            status: document.getElementById('metaStatus').value,
+            assigned_user_id: document.getElementById('metaAssigned').value,
+            priority: document.getElementById('metaPriority').value,
+            tags: document.getElementById('metaTags').value,
+        }),
+    }).then(function(r) {
+        if (!r.ok) throw new Error('فشل حفظ بيانات الشات');
+        return r.json();
+    }).then(function() { loadChatMeta(selectedChatId); }).catch(function(e) { alert(e.message); });
+}
+
+function addInternalNote() {
+    var note = document.getElementById('newNote').value.trim();
+    if (!selectedChatId || !note) return;
+    fetch('/api/inbox/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: selectedChatId, note: note }),
+    }).then(function(r) {
+        if (!r.ok) throw new Error('فشل حفظ الملاحظة');
+        return r.json();
+    }).then(function() { loadChatMeta(selectedChatId); }).catch(function(e) { alert(e.message); });
+}
+
+function runAssist(task) {
+    if (!selectedChatId || !currentMessages.length) {
+        alert('افتح محادثة فيها رسائل أولاً');
+        return;
+    }
+    var panel = document.getElementById('assistPanel');
+    panel.style.display = 'block';
+    panel.textContent = 'جاري تشغيل AI...';
+
+    fetch('/api/ai/assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            task: task,
+            messages: currentMessages,
+            customer_name: selectedChat ? selectedChat.name : '',
+        }),
+    })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(result) {
+            if (!result.ok || result.data.success === false) {
+                throw new Error(result.data.error || 'فشل AI');
+            }
+            var content = result.data.content || '';
+            panel.dataset.usageLogId = result.data.usage_log_id || '';
+            var html = '<div>' + escapeHtml(content) + '</div>' +
+                '<div class="assist-meta">' + escapeHtml(result.data.provider || '') + ' / ' + escapeHtml(result.data.model || '') + '</div>';
+            if (task === 'suggest_reply') {
+                html += '<button class="assist-use" onclick="useAssistReply()">استخدم الرد</button>';
+                panel.dataset.reply = content;
+            } else {
+                panel.dataset.reply = '';
+            }
+            if (panel.dataset.usageLogId) {
+                html += '<div class="assist-feedback"><span>تقييم نتيجة AI:</span><button type="button" onclick="sendAiFeedback(\'up\')">مفيد</button><button type="button" onclick="sendAiFeedback(\'down\')">غير مفيد</button><span id="assistFeedbackStatus"></span></div>';
+            }
+            panel.innerHTML = html;
+        })
+        .catch(function(error) {
+            panel.textContent = 'فشل AI: ' + error.message;
+        });
+}
+
+function sendAiFeedback(feedback) {
+    var panel = document.getElementById('assistPanel');
+    var status = document.getElementById('assistFeedbackStatus');
+    var usageLogId = panel.dataset.usageLogId || '';
+    if (!usageLogId) return;
+    fetch('/api/ai/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usage_log_id: usageLogId, feedback: feedback }),
+    })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(result) {
+            if (!result.ok || result.data.success === false) throw new Error(result.data.error || 'فشل حفظ التقييم');
+            if (status) status.textContent = 'تم الحفظ';
+        })
+        .catch(function(error) {
+            if (status) status.textContent = error.message;
+        });
+}
+
+function useAssistReply() {
+    var panel = document.getElementById('assistPanel');
+    var input = document.getElementById('messageInput');
+    input.value = panel.dataset.reply || '';
+    input.focus();
+    input.dispatchEvent(new Event('input'));
+}
+
+function appendLocalMessage(text) {
+    var container = document.getElementById('messagesContainer');
+    var msg = {
+        body: text,
+        fromMe: true,
+        timestamp: Math.floor(Date.now() / 1000),
+        type: 'chat',
+        hasMedia: false,
+    };
+    container.insertAdjacentHTML('beforeend', renderMessage(msg));
+    container.scrollTop = container.scrollHeight;
+}
+
+function sendCurrentMessage() {
+    var input = document.getElementById('messageInput');
+    var button = document.querySelector('#sendForm button');
+    var text = input.value.trim();
+    if (!selectedChatId || !text) return;
+
+    button.disabled = true;
+    input.disabled = true;
+
+    fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: selectedChatId, message: text }),
+    })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(result) {
+            if (!result.ok || result.data.success === false) {
+                throw new Error(result.data.error || 'فشل الإرسال');
+            }
+            appendLocalMessage(text);
+            input.value = '';
+            input.style.height = '42px';
+        })
+        .catch(function(error) {
+            alert('فشل إرسال الرسالة: ' + error.message);
+        })
+        .finally(function() {
+            button.disabled = false;
+            input.disabled = false;
+            input.focus();
+        });
+}
+
+function renderMessage(m) {
+    var cls = m.fromMe ? 'mine' : 'theirs';
+    var media = renderMedia(m);
+    var body = isPlaceholder(m.body, m.type) ? '' : '<div class="wa-msg-text" dir="auto">' + escapeHtml(m.body) + '</div>';
+    var content = media + body;
+    if (!content) {
+        content = '<div class="wa-media-placeholder"><span class="wa-media-icon">i</span><span>' + mediaLabel(m.type) + '</span></div>';
+    }
+    return '<div class="wa-msg-row ' + cls + '"><div class="wa-msg-wrap"><div class="wa-msg-bubble">' + content + '</div><div class="wa-msg-time">' + formatTime(m.timestamp) + '</div></div></div>';
+}
+
+function renderMedia(m) {
+    if (!m.hasMedia) return '';
+    if (!m.id) {
+        return '<div class="wa-media-placeholder"><span class="wa-media-icon">i</span><span>' + mediaLabel(m.type) + ' غير متاحة</span></div>';
+    }
+
+    var src = '/api/whatsapp/media/' + encodeURIComponent(m.id);
+    var filename = (m.media && m.media.filename) ? m.media.filename : (m.type || 'media');
+    var type = String(m.type || '').toLowerCase();
+
+    if (type === 'image' || type === 'sticker') {
+        return '<img class="wa-media-image" loading="lazy" src="' + src + '" alt="' + escapeHtml(filename) + '" onclick="window.open(this.src, \'_blank\')" onerror="this.replaceWith(mediaErrorNode(\'' + mediaLabel(type) + '\'))">';
+    }
+    if (type === 'audio' || type === 'ptt') {
+        return '<audio class="wa-media-audio" controls preload="none" src="' + src + '"></audio>';
+    }
+    if (type === 'video') {
+        return '<video class="wa-media-video" controls preload="metadata" src="' + src + '"></video>';
+    }
+    return '<a class="wa-media-file" href="' + src + '" download="' + escapeHtml(filename) + '"><span class="wa-media-icon">↓</span><span>تحميل ' + mediaLabel(type) + '</span></a>';
+}
+
+function mediaErrorNode(label) {
+    var div = document.createElement('div');
+    div.className = 'wa-media-placeholder';
+    div.innerHTML = '<span class="wa-media-icon">i</span><span>' + escapeHtml(label) + ' غير متاحة حالياً</span>';
+    return div;
+}
+
+function filterBySearch(chat) {
+    var q = document.getElementById('chatSearch').value.toLowerCase();
+    if (!q) return true;
+    return String(chat.name || '').toLowerCase().includes(q) || String(chat.phone || '').includes(q);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('chatSearch').addEventListener('input', function() {
+        renderChats(allChats.filter(filterBySearch));
+    });
+    document.getElementById('sendForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        sendCurrentMessage();
+    });
+    document.getElementById('messageInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendCurrentMessage();
+        }
+    });
+    document.getElementById('messageInput').addEventListener('input', function() {
+        this.style.height = '42px';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+    loadChats();
+});
+</script>
+{% endblock %}

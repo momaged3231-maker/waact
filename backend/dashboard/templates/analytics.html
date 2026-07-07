@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Analytics V3{% endblock %}
+{% block heading %}Analytics V3{% endblock %}
+
+{% block content %}
+<div class="cards">
+    <div class="card"><div class="label">العملاء</div><div class="value">{{ metrics.customers }}</div><div class="sub">+{{ metrics.new_customers_30d }} خلال 30 يوم</div></div>
+    <div class="card"><div class="label">محادثات 30 يوم</div><div class="value">{{ metrics.conversations_30d }}</div><div class="sub">وارد {{ metrics.inbound_30d }} / صادر {{ metrics.outbound_30d }}</div></div>
+    <div class="card"><div class="label">Open Leads</div><div class="value">{{ metrics.open_leads }}</div><div class="sub">Won: {{ metrics.won_leads }}</div></div>
+    <div class="card"><div class="label">مهام pending</div><div class="value">{{ metrics.pending_tasks }}</div><div class="sub">متأخرة: {{ metrics.overdue_tasks }}</div></div>
+    <div class="card"><div class="label">حملات واتساب</div><div class="value">{{ metrics.campaigns_30d }}</div><div class="sub">Sent {{ metrics.campaign_sent }} / Failed {{ metrics.campaign_failed }}</div></div>
+    <div class="card"><div class="label">AI Cost 30d</div><div class="value">${{ "%.4f"|format(metrics.ai_cost_30d) }}</div><div class="sub">{{ metrics.ai_calls_30d }} calls</div></div>
+    <div class="card"><div class="label">Opt-outs</div><div class="value">{{ metrics.opt_outs }}</div><div class="sub">كلمة: إلغاء</div></div>
+    <div class="card"><div class="label">Automation</div><div class="value">{{ metrics.automation_total_30d }}</div><div class="sub">Success {{ metrics.automation_success_30d }} / Skipped {{ metrics.automation_skipped_30d }}</div></div>
+    <div class="card"><div class="label">Radius Users</div><div class="value">{{ metrics.radius_subscribers }}</div><div class="sub">Active {{ metrics.radius_active }} / Expired {{ metrics.radius_expired }}</div></div>
+    <div class="card"><div class="label">Radius Online</div><div class="value">{{ metrics.radius_online }}</div><div class="sub">حسب آخر sync</div></div>
+    <div class="card"><div class="label">Routers</div><div class="value">{{ metrics.routers }}</div><div class="sub">Enabled {{ metrics.routers_enabled }} / Actions 30d {{ metrics.router_actions_30d }}</div></div>
+</div>
+
+<div class="charts-grid">
+    <div class="chart-container">
+        <h3>المحادثات اليومية آخر 14 يوم</h3>
+        <canvas id="dailyConversations"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>Pipeline Stages</h3>
+        <canvas id="pipelineChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>Automation Outcomes</h3>
+        <canvas id="automationChart"></canvas>
+    </div>
+    <div class="detail-card analytics-summary">
+        <h2>AI Feedback</h2>
+        <div class="feedback-row"><span>مفيد</span><strong>{{ metrics.ai_feedback_up }}</strong></div>
+        <div class="feedback-row"><span>غير مفيد</span><strong>{{ metrics.ai_feedback_down }}</strong></div>
+        <p class="text-muted">التكلفة المعروضة تقديرية بناءً على طول النص وليست فاتورة رسمية من المزود.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .analytics-summary { min-height:300px; }
+    .feedback-row { display:flex; justify-content:space-between; gap:12px; padding:14px 0; border-bottom:1px solid #2a2a4a; }
+    .feedback-row strong { color:#00d4aa; font-size:24px; }
+    @media (max-width:900px) { .charts-grid { grid-template-columns:1fr; } }
+</style>
+<script>
+const charts = {{ charts | tojson | safe }};
+const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#ddd' } } },
+    scales: {
+        x: { ticks: { color: '#aaa' }, grid: { color: '#24243d' } },
+        y: { ticks: { color: '#aaa' }, grid: { color: '#24243d' }, beginAtZero: true }
+    }
+};
+
+new Chart(document.getElementById('dailyConversations'), {
+    type: 'line',
+    data: { labels: charts.daily_conversations.labels, datasets: [{ label: 'Conversations', data: charts.daily_conversations.values, borderColor: '#00d4aa', backgroundColor: 'rgba(0,212,170,.14)', tension: .35, fill: true }] },
+    options: commonOptions,
+});
+
+new Chart(document.getElementById('pipelineChart'), {
+    type: 'bar',
+    data: { labels: charts.pipeline.labels, datasets: [{ label: 'Leads', data: charts.pipeline.values, backgroundColor: '#4a9eff' }] },
+    options: commonOptions,
+});
+
+new Chart(document.getElementById('automationChart'), {
+    type: 'doughnut',
+    data: { labels: charts.automation.labels, datasets: [{ data: charts.automation.values, backgroundColor: ['#00d4aa', '#ffaa00', '#ff5555'] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#ddd' } } } },
+});
+</script>
+{% endblock %}

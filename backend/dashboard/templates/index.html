@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}WAACT - الرئيسية{% endblock %}
+{% block heading %}لوحة التحكم الرئيسية{% endblock %}
+
+{% block content %}
+<div class="cards">
+    <div class="card">
+        <div class="label">رسائل اليوم</div>
+        <div class="value">{{ stats.messages_today }}</div>
+        <div class="sub">{{ today_report.get('inbound_messages', 0) }} واردة</div>
+    </div>
+    <div class="card">
+        <div class="label">عملاء جدد اليوم</div>
+        <div class="value">{{ stats.new_customers_today }}</div>
+        <div class="sub">إجمالي {{ stats.total_customers }}</div>
+    </div>
+    <div class="card">
+        <div class="label">عملاء نشطون اليوم</div>
+        <div class="value">{{ stats.active_customers }}</div>
+        <div class="sub">{{ stats.interested_customers }} مهتم</div>
+    </div>
+    <div class="card">
+        <div class="label">بانتظار المتابعة</div>
+        <div class="value">{{ stats.follow_up_needed }}</div>
+        <div class="sub">{{ stats.pending_handoffs }} تحويل نشط</div>
+    </div>
+</div>
+
+<div class="charts-grid">
+    <div class="chart-container">
+        <h3>توزيع الرسائل (24 ساعة)</h3>
+        <canvas id="messagesChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>حالة العملاء</h3>
+        <canvas id="customersChart"></canvas>
+    </div>
+</div>
+
+<div class="cards">
+    <div class="card">
+        <div class="label">الردود الآلية</div>
+        <div class="value">{{ today_report.get('auto_reply_rate', 0) }}%</div>
+        <div class="sub">معدل التغطية التلقائي</div>
+    </div>
+    <div class="card">
+        <div class="label">الفرص الجديدة</div>
+        <div class="value">{{ today_report.get('total_leads', 0) }}</div>
+        <div class="sub">{{ today_report.get('won_leads', 0) }} مغلقة بنجاح</div>
+    </div>
+    <div class="card">
+        <div class="label">أكثر خدمة طلباً</div>
+        <div class="value" style="font-size:20px">
+            {% set services = today_report.get('top_services', []) %}
+            {% if services %}
+                {{ services[0].service }}
+            {% else %}
+                -
+            {% endif %}
+        </div>
+        <div class="sub">
+            {% if services %}
+                {{ services[0].count }} استفسار
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="label">أكثر نية تكرراً</div>
+        <div class="value" style="font-size:20px">
+            {% set intents = today_report.get('top_intents', []) %}
+            {% if intents %}
+                {{ intents[0].intent }}
+            {% else %}
+                -
+            {% endif %}
+        </div>
+        <div class="sub">
+            {% if intents %}
+                {{ intents[0].count }} مرة
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="flex flex-wrap gap-10 mb-20">
+    <div class="detail-card" style="flex:2">
+        <h2>آخر المحادثات</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>العميل</th>
+                    <th>الرسالة</th>
+                    <th>النية</th>
+                    <th>التاريخ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for conv in recent_conversations %}
+                <tr>
+                    <td>
+                        <a href="/customer/{{ conv.customer_id }}" style="color:#00d4aa;text-decoration:none">
+                            {{ conv.customer.name or conv.customer.phone[:10] + '...' if conv.customer else conv.customer_id[:8] }}
+                        </a>
+                    </td>
+                    <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        {{ conv.message_text[:80] }}{% if conv.message_text|length > 80 %}...{% endif %}
+                    </td>
+                    <td><span class="status status-{{ conv.intent or 'new' }}">{{ conv.intent or '?' }}</span></td>
+                    <td class="text-muted">{{ conv.created_at.strftime('%H:%M') }}</td>
+                </tr>
+                {% endfor %}
+                {% if not recent_conversations %}
+                <tr><td colspan="4" class="text-center text-muted">لا توجد محادثات بعد</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="detail-card" style="flex:1">
+        <h2>طلبات التحويل</h2>
+        {% for h in pending_handoffs %}
+        <div style="padding:10px 0;border-bottom:1px solid #2a2a4a">
+            <div style="font-size:13px;color:#fff">{{ h.customer.name or h.customer_id[:8] if h.customer else h.customer_id[:8] }}</div>
+            <div class="text-muted" style="font-size:11px;margin-top:4px">{{ h.reason[:60] }}</div>
+            <div class="status status-pending" style="margin-top:4px">بانتظار الرد</div>
+        </div>
+        {% endfor %}
+        {% if not pending_handoffs %}
+        <div class="text-muted text-center" style="padding:20px 0">لا توجد طلبات تحويل نشطة</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var today = {{ today_report | tojson | safe }};
+    var def = {inbound_messages:0, outbound_messages:0};
+    today = today || def;
+
+    new Chart(document.getElementById('messagesChart'), {
+        type: 'bar',
+        data: {
+            labels: ['الواردة', 'الصادرة'],
+            datasets: [{
+                label: 'الرسائل اليوم',
+                data: [today.inbound_messages, today.outbound_messages],
+                backgroundColor: ['#4a9eff', '#00d4aa'],
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, grid: { color: '#2a2a4a' }, ticks: { color: '#888' } },
+                x: { grid: { display: false }, ticks: { color: '#888' } }
+            }
+        }
+    });
+
+    new Chart(document.getElementById('customersChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['جديد', 'مهتم', 'متابعة', 'تم البيع', 'غير مهتم'],
+            datasets: [{
+                data: [
+                    {{ stats.total_customers - stats.interested_customers - stats.follow_up_needed }},
+                    {{ stats.interested_customers }},
+                    {{ stats.follow_up_needed }},
+                    0, 0
+                ],
+                backgroundColor: ['#4a9eff', '#00d4aa', '#ffaa00', '#00ff88', '#ff5555'],
+                borderWidth: 0,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#888', padding: 10, usePointStyle: true }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

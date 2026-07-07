@@ -1,0 +1,16 @@
+backend/.env
+backend/.env.codespaces
+backend/ai_settings.json
+backend/radius_settings.json
+backend/router_auto_settings.json
+backend/waact.db
+backend/waact.db-*
+backend/chroma_db/
+whatsapp-connector/.env
+whatsapp-connector/session-data/
+whatsapp-connector/node_modules/
+whatsapp-connector/.env.codespaces
+.vercel/
+*.log
+__pycache__/
+*.pyc

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}الحملات{% endblock %}
+{% block heading %}Broadcast Campaigns{% endblock %}
+
+{% block content %}
+<div class="campaign-layout">
+    <section class="detail-card campaign-form-card">
+        <h2>حملة جديدة</h2>
+        <form method="post" action="/campaigns/create">
+            <div class="form-group">
+                <label>اسم الحملة</label>
+                <input name="name" required placeholder="مثال: عرض نهاية الأسبوع">
+            </div>
+            <div class="form-group">
+                <label>الشريحة</label>
+                <select name="segment">
+                    <option value="all">كل العملاء ({{ segments.get('all', 0) }})</option>
+                    <option value="new">جدد ({{ segments.get('new', 0) }})</option>
+                    <option value="interested">مهتمون ({{ segments.get('interested', 0) }})</option>
+                    <option value="needs_follow_up">يحتاجون متابعة ({{ segments.get('needs_follow_up', 0) }})</option>
+                    <option value="sold">عملاء سابقون ({{ segments.get('sold', 0) }})</option>
+                    <option value="radius_expiring_3d">Radius قرب الانتهاء 3 أيام ({{ segments.get('radius_expiring_3d', 0) }})</option>
+                    <option value="radius_expired">Radius منتهي ({{ segments.get('radius_expired', 0) }})</option>
+                    <option value="radius_active">Radius نشط ({{ segments.get('radius_active', 0) }})</option>
+                    <option value="radius_offline">Radius نشط لكن Offline ({{ segments.get('radius_offline', 0) }})</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>الرسالة</label>
+                <textarea name="message" required placeholder="مرحباً {name}، لدينا عرض يناسبك..."></textarea>
+                <div class="text-muted" style="margin-top:6px">المتغيرات المتاحة: {name} {phone} {status} {service}</div>
+            </div>
+            <div class="form-group">
+                <label>موعد الإرسال اختياري</label>
+                <input type="datetime-local" name="scheduled_at">
+            </div>
+            <button class="btn btn-primary" type="submit">إنشاء الحملة</button>
+            <div class="text-muted" style="margin-top:10px">الإرسال يتم على دفعات حتى 100 مستلم. العملاء الذين أرسلوا "إلغاء" مستبعدون تلقائياً.</div>
+            <div class="text-muted" style="margin-top:6px">عدد المستبعدين حالياً: {{ opt_out_count }}</div>
+        </form>
+    </section>
+
+    <section class="detail-card">
+        <h2>الحملات</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>الاسم</th>
+                    <th>الشريحة</th>
+                    <th>الحالة</th>
+                    <th>المستلمين</th>
+                    <th>موعد الإرسال</th>
+                    <th>تم الإرسال</th>
+                    <th>فشل</th>
+                    <th>الإجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in campaigns %}
+                <tr>
+                    <td>{{ c.name }}</td>
+                    <td>{{ c.segment }}</td>
+                    <td><span class="status status-{{ c.status }}">{{ c.status }}</span></td>
+                    <td>{{ c.total_recipients }}</td>
+                    <td>{{ c.scheduled_at.strftime('%Y-%m-%d %H:%M') if c.scheduled_at else '-' }}</td>
+                    <td style="color:#00d4aa">{{ c.sent_count }}</td>
+                    <td style="color:#ff7777">{{ c.failed_count }}</td>
+                    <td>
+                        {% if c.status == 'scheduled' and c.id not in due_campaign_ids %}
+                        <span class="text-muted">مجدولة</span>
+                        {% elif c.status in ['draft', 'paused', 'sending', 'scheduled'] and c.total_recipients > c.sent_count + c.failed_count %}
+                        <form method="post" action="/campaigns/{{ c.id }}/send" onsubmit="return confirm('إرسال الحملة الآن؟')">
+                            <select name="batch_size" class="batch-select">
+                                <option value="25">25</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                            </select>
+                            <button class="btn btn-primary btn-small">إرسال دفعة</button>
+                        </form>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not campaigns %}
+                <tr><td colspan="8" class="text-center text-muted" style="padding:40px">لا توجد حملات بعد</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .campaign-layout { display:grid; grid-template-columns:360px 1fr; gap:20px; align-items:start; }
+    .campaign-form-card { position:sticky; top:20px; }
+    .batch-select { background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:8px; padding:7px; margin-left:6px; }
+    @media (max-width: 900px) { .campaign-layout { grid-template-columns:1fr; } .campaign-form-card { position:static; } }
+</style>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Pipeline{% endblock %}
+{% block heading %}CRM Pipeline{% endblock %}
+
+{% block content %}
+<div class="cards">
+    <div class="card"><div class="label">إجمالي الفرص</div><div class="value">{{ total_leads }}</div></div>
+    <div class="card"><div class="label">القيمة المتوقعة</div><div class="value">{{ "%.0f"|format(total_value) }}</div><div class="sub">ريال</div></div>
+    <div class="card"><div class="label">مراحل البيع</div><div class="value">{{ stages|length }}</div></div>
+</div>
+
+<div class="pipeline-board">
+    {% for status, label in stages %}
+    {% set leads = grouped.get(status, []) %}
+    <section class="pipeline-column" data-status="{{ status }}">
+        <header>
+            <h3>{{ label }}</h3>
+            <span>{{ leads|length }}</span>
+        </header>
+        <div class="pipeline-dropzone" data-status="{{ status }}">
+            {% for lead in leads %}
+            <article class="lead-card" draggable="true" data-lead-id="{{ lead.id }}">
+                <div class="lead-title">
+                    <a href="/customer/{{ lead.customer_id }}">{{ lead.customer.name or lead.customer.phone if lead.customer else lead.customer_id[:8] }}</a>
+                    <span class="priority priority-{{ lead.priority }}">{{ lead.priority }}</span>
+                </div>
+                <div class="lead-meta">{{ lead.service_interest or 'خدمة غير محددة' }}</div>
+                <div class="lead-row"><span>القيمة</span><strong>{{ "%.0f"|format(lead.estimated_value or 0) }}</strong></div>
+                <div class="lead-row"><span>المسؤول</span><strong>{{ lead.assigned_to or '-' }}</strong></div>
+                {% if lead.next_follow_up_at %}
+                <div class="lead-follow">متابعة: {{ lead.next_follow_up_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                {% endif %}
+                <select onchange="moveLead('{{ lead.id }}', this.value)">
+                    {% for s, l in stages %}
+                    <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ l }}</option>
+                    {% endfor %}
+                </select>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .pipeline-board { display:grid; grid-template-columns:repeat(7, minmax(240px, 1fr)); gap:14px; overflow-x:auto; padding-bottom:16px; }
+    .pipeline-column { background:#151528; border:1px solid #2a2a4a; border-radius:14px; min-height:520px; display:flex; flex-direction:column; }
+    .pipeline-column header { display:flex; justify-content:space-between; align-items:center; padding:14px; border-bottom:1px solid #2a2a4a; }
+    .pipeline-column h3 { font-size:14px; color:#fff; margin:0; }
+    .pipeline-column header span { background:#00d4aa22; color:#00d4aa; border-radius:999px; padding:3px 9px; font-size:12px; }
+    .pipeline-dropzone { flex:1; padding:12px; display:flex; flex-direction:column; gap:10px; }
+    .pipeline-dropzone.drag-over { background:#00d4aa10; }
+    .lead-card { background:#1a1a2e; border:1px solid #2a2a4a; border-radius:12px; padding:12px; cursor:grab; box-shadow:0 10px 20px rgba(0,0,0,.12); }
+    .lead-card:active { cursor:grabbing; }
+    .lead-title { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .lead-title a { color:#fff; text-decoration:none; font-weight:700; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lead-meta { color:#00d4aa; font-size:12px; margin:8px 0 10px; }
+    .lead-row { display:flex; justify-content:space-between; color:#888; font-size:12px; margin-top:5px; }
+    .lead-row strong { color:#ddd; }
+    .lead-follow { margin-top:9px; color:#ffaa00; font-size:12px; }
+    .lead-card select { margin-top:10px; width:100%; padding:7px 8px; border-radius:8px; background:#101020; color:#fff; border:1px solid #2a2a4a; }
+    .priority { padding:2px 7px; border-radius:999px; font-size:10px; }
+    .priority-high { background:#3a1a1a; color:#ff7777; }
+    .priority-medium { background:#3a2a1a; color:#ffaa00; }
+    .priority-low { background:#1a3a2c; color:#00d4aa; }
+    @media (max-width: 1200px) { .pipeline-board { grid-template-columns:repeat(7, 260px); } }
+</style>
+<script>
+var draggedLeadId = null;
+
+document.querySelectorAll('.lead-card').forEach(function(card) {
+    card.addEventListener('dragstart', function() { draggedLeadId = card.dataset.leadId; });
+});
+
+document.querySelectorAll('.pipeline-dropzone').forEach(function(zone) {
+    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function() { zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        if (draggedLeadId) moveLead(draggedLeadId, zone.dataset.status, true);
+    });
+});
+
+function moveLead(leadId, status, reload) {
+    var form = new FormData();
+    form.append('status', status);
+    fetch('/pipeline/leads/' + leadId + '/status', { method: 'POST', body: form })
+        .then(function(r) { if (!r.ok) throw new Error('فشل تحديث الحالة'); return r.json(); })
+        .then(function() { window.location.reload(); })
+        .catch(function(error) { alert(error.message); });
+}
+</script>
+{% endblock %}

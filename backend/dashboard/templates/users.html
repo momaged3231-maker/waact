@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}المستخدمون{% endblock %}
+{% block heading %}المستخدمون والصلاحيات{% endblock %}
+
+{% block content %}
+{% if not auth_enabled %}
+<div class="detail-card" style="border-color:#ffaa00">
+    <strong style="color:#ffaa00">Auth غير مفعل حالياً.</strong>
+    <span class="text-muted">فعّل `AUTH_ENABLED=true` في `.env` لتطبيق صلاحيات المستخدمين على الداشبورد.</span>
+</div>
+{% endif %}
+
+<div class="flex flex-wrap gap-10">
+    <div class="detail-card" style="flex:0 0 360px">
+        <h2>إضافة مستخدم</h2>
+        <form method="post" action="/users/create">
+            <div class="form-group"><label>Username</label><input name="username" required></div>
+            <div class="form-group"><label>Password</label><input name="password" type="password" required></div>
+            <div class="form-group">
+                <label>Role</label>
+                <select name="role">
+                    <option value="agent">agent</option>
+                    <option value="marketing">marketing</option>
+                    <option value="manager">manager</option>
+                    <option value="admin">admin</option>
+                    <option value="owner">owner</option>
+                    <option value="viewer">viewer</option>
+                </select>
+            </div>
+            <button class="btn btn-primary">إضافة</button>
+        </form>
+    </div>
+
+    <div class="detail-card" style="flex:1">
+        <h2>كل المستخدمين</h2>
+        <table>
+            <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last Login</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.username }}</td>
+                    <td><span class="status status-interested">{{ user.role }}</span></td>
+                    <td>{{ 'نشط' if user.is_active else 'متوقف' }}</td>
+                    <td class="text-muted">{{ user.last_login_at.strftime('%Y-%m-%d %H:%M') if user.last_login_at else '-' }}</td>
+                    <td>
+                        <form method="post" action="/users/{{ user.id }}/toggle">
+                            <button class="btn btn-small {{ 'btn-danger' if user.is_active else 'btn-primary' }}">{{ 'تعطيل' if user.is_active else 'تفعيل' }}</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not users %}<tr><td colspan="5" class="text-center text-muted" style="padding:40px">لا يوجد مستخدمون</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

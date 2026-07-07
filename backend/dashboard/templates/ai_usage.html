@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}استخدام AI{% endblock %}
+{% block heading %}AI Provider Health{% endblock %}
+
+{% block content %}
+<div class="detail-card">
+    <h2>صحة مزودي AI</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Provider</th>
+                <th>Model</th>
+                <th>الطلبات</th>
+                <th>نجاح</th>
+                <th>فشل</th>
+                <th>Success Rate</th>
+                <th>Avg Latency</th>
+                <th>Tokens</th>
+                <th>Est. Cost</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            {% set successes = row.successes or 0 %}
+            {% set failures = row.total - successes %}
+            <tr>
+                <td>{{ row.provider }}</td>
+                <td dir="ltr">{{ row.model or '-' }}</td>
+                <td>{{ row.total }}</td>
+                <td style="color:#00d4aa">{{ successes }}</td>
+                <td style="color:#ff7777">{{ failures }}</td>
+                <td>{{ "%.1f"|format(successes / row.total * 100) if row.total else 0 }}%</td>
+                <td>{{ "%.0f"|format(row.avg_latency or 0) }} ms</td>
+                <td dir="ltr">{{ (row.prompt_tokens or 0) + (row.completion_tokens or 0) }}</td>
+                <td dir="ltr">${{ "%.6f"|format(row.estimated_cost_usd or 0) }}</td>
+            </tr>
+            {% endfor %}
+            {% if not rows %}
+            <tr><td colspan="9" class="text-center text-muted" style="padding:40px">لا توجد طلبات AI بعد</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<div class="detail-card">
+    <h2>آخر الأخطاء</h2>
+    <table>
+        <thead><tr><th>الوقت</th><th>Provider</th><th>Model</th><th>الخطأ</th></tr></thead>
+        <tbody>
+            {% for log in recent_errors %}
+            <tr>
+                <td class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{{ log.provider }}</td>
+                <td dir="ltr">{{ log.model or '-' }}</td>
+                <td style="max-width:620px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ log.error }}</td>
+            </tr>
+            {% endfor %}
+            {% if not recent_errors %}
+            <tr><td colspan="4" class="text-center text-muted" style="padding:30px">لا توجد أخطاء</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<div class="detail-card">
+    <h2>آخر الطلبات</h2>
+    <table>
+        <thead><tr><th>الوقت</th><th>Provider</th><th>المهمة</th><th>الحالة</th><th>Latency</th><th>Tokens</th><th>Cost</th><th>Feedback</th></tr></thead>
+        <tbody>
+            {% for log in recent_calls %}
+            <tr>
+                <td class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{{ log.provider }}</td>
+                <td>{{ log.task_type }}</td>
+                <td><span class="status {{ 'status-sold' if log.success else 'status-not_interested' }}">{{ 'نجح' if log.success else 'فشل' }}</span></td>
+                <td>{{ log.latency_ms or 0 }} ms</td>
+                <td dir="ltr">{{ (log.prompt_tokens or 0) + (log.completion_tokens or 0) }}</td>
+                <td dir="ltr">${{ "%.6f"|format(log.estimated_cost_usd or 0) }}</td>
+                <td>{{ 'مفيد' if log.feedback == 'up' else ('غير مفيد' if log.feedback == 'down' else '-') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

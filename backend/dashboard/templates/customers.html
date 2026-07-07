@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}العملاء{% endblock %}
+{% block heading %}إدارة العملاء{% endblock %}
+
+{% block content %}
+<div class="cards" style="margin-bottom:20px">
+    {% for status_key, status_count in status_counts.items() %}
+    <div class="card">
+        <div class="label">{{ status_key }}</div>
+        <div class="value">{{ status_count }}</div>
+    </div>
+    {% endfor %}
+    <div class="card">
+        <div class="label">الإجمالي</div>
+        <div class="value">{{ total }}</div>
+    </div>
+</div>
+
+<div class="filter-bar">
+    <form method="get" class="flex flex-wrap gap-10" style="width:100%">
+        <select name="status" onchange="this.form.submit()">
+            <option value="">كل الحالات</option>
+            <option value="new" {% if current_status == 'new' %}selected{% endif %}>جديد</option>
+            <option value="interested" {% if current_status == 'interested' %}selected{% endif %}>مهتم</option>
+            <option value="needs_follow_up" {% if current_status == 'needs_follow_up' %}selected{% endif %}>متابعة</option>
+            <option value="sold" {% if current_status == 'sold' %}selected{% endif %}>تم البيع</option>
+            <option value="not_interested" {% if current_status == 'not_interested' %}selected{% endif %}>غير مهتم</option>
+        </select>
+        <input type="text" name="search" placeholder="بحث برقم الهاتف أو الاسم" value="{{ search or '' }}">
+        <button type="submit" class="btn btn-primary btn-small">بحث</button>
+        {% if current_status or search %}
+        <a href="/customers">إزالة الفلتر</a>
+        {% endif %}
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>الاسم</th>
+            <th>رقم الهاتف</th>
+            <th>الحالة</th>
+            <th>الخدمة المهتم بها</th>
+            <th>آخر نشاط</th>
+            <th>الرسائل</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for c in customers %}
+        <tr>
+            <td>
+                <a href="/customer/{{ c.id }}" style="color:#00d4aa;text-decoration:none">
+                    {{ c.name or 'غير معروف' }}
+                </a>
+            </td>
+            <td dir="ltr" style="text-align:right">{{ c.phone }}</td>
+            <td><span class="status status-{{ c.status }}">{{ c.status }}</span></td>
+            <td>{{ c.interested_service or '-' }}</td>
+            <td class="text-muted" style="font-size:12px">{{ c.last_seen_at.strftime('%Y-%m-%d %H:%M') if c.last_seen_at else '-' }}</td>
+            <td>{{ c.total_messages or 0 }}</td>
+        </tr>
+        {% endfor %}
+        {% if not customers %}
+        <tr><td colspan="6" class="text-center text-muted" style="padding:40px">لا يوجد عملاء</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% for p in range(1, total_pages + 1) %}
+    <a href="/customers?page={{ p }}{% if current_status %}&status={{ current_status }}{% endif %}{% if search %}&search={{ search }}{% endif %}"
+       class="{% if p == page %}active{% endif %}">{{ p }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}الفرص{% endblock %}
+{% block heading %}إدارة الفرص{% endblock %}
+
+{% block content %}
+<div class="cards" style="margin-bottom:20px">
+    {% for status_key, status_count in status_counts.items() %}
+    <div class="card">
+        <div class="label">{{ status_key }}</div>
+        <div class="value">{{ status_count }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="filter-bar">
+    <form method="get" class="flex flex-wrap gap-10">
+        <select name="status" onchange="this.form.submit()">
+            <option value="">كل الحالات</option>
+            <option value="new" {% if current_status == 'new' %}selected{% endif %}>جديد</option>
+            <option value="contacted" {% if current_status == 'contacted' %}selected{% endif %}>تم التواصل</option>
+            <option value="qualified" {% if current_status == 'qualified' %}selected{% endif %}>مؤهل</option>
+            <option value="proposal" {% if current_status == 'proposal' %}selected{% endif %}>عرض سعر</option>
+            <option value="negotiation" {% if current_status == 'negotiation' %}selected{% endif %}>تفاوض</option>
+            <option value="won" {% if current_status == 'won' %}selected{% endif %}>فوز</option>
+            <option value="lost" {% if current_status == 'lost' %}selected{% endif %}>خسارة</option>
+        </select>
+        <select name="priority" onchange="this.form.submit()">
+            <option value="">كل الأولويات</option>
+            <option value="low" {% if current_priority == 'low' %}selected{% endif %}>منخفضة</option>
+            <option value="medium" {% if current_priority == 'medium' %}selected{% endif %}>متوسطة</option>
+            <option value="high" {% if current_priority == 'high' %}selected{% endif %}>عالية</option>
+        </select>
+        {% if current_status or current_priority %}
+        <a href="/leads">إزالة الفلتر</a>
+        {% endif %}
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>العميل</th>
+            <th>الخدمة</th>
+            <th>الحالة</th>
+            <th>الأولوية</th>
+            <th>مسؤول</th>
+            <th>موعد المتابعة</th>
+            <th>آخر تحديث</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for lead in leads %}
+        <tr>
+            <td>
+                <a href="/customer/{{ lead.customer_id }}" style="color:#00d4aa;text-decoration:none">
+                    {{ lead.customer.name or lead.customer.phone[:15] if lead.customer else lead.customer_id[:8] }}
+                </a>
+            </td>
+            <td>{{ lead.service_interest or '-' }}</td>
+            <td><span class="status status-{{ lead.lead_status }}">{{ lead.lead_status }}</span></td>
+            <td><span class="status status-{{ lead.priority }}">{{ lead.priority }}</span></td>
+            <td>{{ lead.assigned_to or '-' }}</td>
+            <td class="text-muted">{{ lead.next_follow_up_at.strftime('%Y-%m-%d') if lead.next_follow_up_at else '-' }}</td>
+            <td class="text-muted">{{ lead.updated_at.strftime('%Y-%m-%d') if lead.updated_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+        {% if not leads %}
+        <tr><td colspan="7" class="text-center text-muted" style="padding:40px">لا توجد فرص</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

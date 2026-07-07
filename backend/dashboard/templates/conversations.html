@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}المحادثات{% endblock %}
+{% block heading %}جميع المحادثات{% endblock %}
+
+{% block content %}
+<div class="filter-bar">
+    <form method="get" class="flex flex-wrap gap-10" style="width:100%">
+        <select name="customer_id" onchange="this.form.submit()">
+            <option value="">كل العملاء</option>
+            {% for c in customers %}
+            <option value="{{ c.id }}" {% if selected_customer_id == c.id %}selected{% endif %}>
+                {{ c.name or c.phone[:15] }}
+            </option>
+            {% endfor %}
+        </select>
+        {% if selected_customer_id %}
+        <a href="/conversations">إزالة الفلتر</a>
+        {% endif %}
+        <span class="text-muted">إجمالي {{ total }} محادثة</span>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>العميل</th>
+            <th>الاتجاه</th>
+            <th>الرسالة</th>
+            <th>الرد</th>
+            <th>النية</th>
+            <th>التاريخ</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for conv in conversations %}
+        <tr>
+            <td>
+                <a href="/customer/{{ conv.customer_id }}" style="color:#00d4aa;text-decoration:none;font-size:12px">
+                    {{ conv.customer.name or conv.customer.phone[:12] if conv.customer else conv.customer_id[:8] }}
+                </a>
+            </td>
+            <td>
+                <span class="status status-{{ 'interested' if conv.direction == 'inbound' else 'sold' }}">
+                    {{ 'وارد' if conv.direction == 'inbound' else 'صادر' }}
+                </span>
+            </td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                {{ conv.message_text[:100] }}
+            </td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#888">
+                {{ conv.ai_response[:80] if conv.ai_response else '-' }}
+            </td>
+            <td>
+                {% if conv.intent %}
+                <span class="status status-{{ conv.intent }}">{{ conv.intent }}</span>
+                {% else %}
+                <span class="text-muted">-</span>
+                {% endif %}
+            </td>
+            <td class="text-muted" style="font-size:12px">{{ conv.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+        {% if not conversations %}
+        <tr><td colspan="6" class="text-center text-muted" style="padding:40px">لا توجد محادثات</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% for p in range(1, total_pages + 1) %}
+    <a href="/conversations?page={{ p }}{% if selected_customer_id %}&customer_id={{ selected_customer_id }}{% endif %}"
+       class="{% if p == page %}active{% endif %}">{{ p }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

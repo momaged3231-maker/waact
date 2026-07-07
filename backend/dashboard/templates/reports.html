@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}التقارير{% endblock %}
+{% block heading %}التقارير والإحصائيات{% endblock %}
+
+{% block content %}
+<div class="cards">
+    <div class="card">
+        <div class="label">يومي - رسائل</div>
+        <div class="value">{{ today.get('total_messages', '0') }}</div>
+        <div class="sub">{{ today.get('inbound_messages', 0) }} واردة / {{ today.get('outbound_messages', 0) }} صادرة</div>
+    </div>
+    <div class="card">
+        <div class="label">أسبوعي - رسائل</div>
+        <div class="value">{{ weekly.get('total_messages', '0') }}</div>
+        <div class="sub">{{ weekly.get('new_customers', 0) }} عميل جديد</div>
+    </div>
+    <div class="card">
+        <div class="label">شهري - رسائل</div>
+        <div class="value">{{ monthly.get('total_messages', '0') }}</div>
+        <div class="sub">{{ monthly.get('total_leads', 0) }} فرصة</div>
+    </div>
+    <div class="card">
+        <div class="label">معدل الرد الآلي</div>
+        <div class="value">{{ today.get('auto_reply_rate', 0) }}%</div>
+        <div class="sub">اليوم</div>
+    </div>
+</div>
+
+<div class="charts-grid">
+    <div class="chart-container">
+        <h3>مقارنة الفترات - الرسائل</h3>
+        <canvas id="periodMessagesChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>أكثر الخدمات طلباً (شهري)</h3>
+        <canvas id="topServicesChart"></canvas>
+    </div>
+</div>
+
+<div class="detail-card">
+    <h2>التقارير المخزنة</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>النوع</th>
+                <th>تاريخ البداية</th>
+                <th>تاريخ النهاية</th>
+                <th>الرسائل</th>
+                <th>عملاء جدد</th>
+                <th>فرص</th>
+                <th>تحويلات</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for report in reports %}
+            <tr>
+                <td><span class="status status-{{ report.report_type}}">{{ report.report_type }}</span></td>
+                <td class="text-muted">{{ report.period_start.strftime('%Y-%m-%d') if report.period_start else '-' }}</td>
+                <td class="text-muted">{{ report.period_end.strftime('%Y-%m-%d') if report.period_end else '-' }}</td>
+                <td>{{ report.report_data.get('total_messages', 0) }}</td>
+                <td>{{ report.report_data.get('new_customers', 0) }}</td>
+                <td>{{ report.report_data.get('total_leads', 0) }}</td>
+                <td>{{ report.report_data.get('handoff_requests', 0) }}</td>
+            </tr>
+            {% endfor %}
+            {% if not reports %}
+            <tr><td colspan="7" class="text-center text-muted" style="padding:40px">لا توجد تقارير بعد</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<div class="detail-card">
+    <h2>مؤشرات الأداء</h2>
+    <div class="detail-grid">
+        <div class="detail-item">
+            <div class="item-label">معدل التحويل (شهري)</div>
+            <div class="item-value">
+                {% set won = monthly.get('won_leads', 0) %}
+                {% set total = monthly.get('total_leads', 0) %}
+                {{ "%.1f"|format(won / total * 100) if total and total > 0 else 0 }}%
+            </div>
+        </div>
+        <div class="detail-item">
+            <div class="item-label">العملاء المتكررون (شهري)</div>
+            <div class="item-value">{{ monthly.get('returning_customers', 0) }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="item-label">معدل التحويل للموظف (شهري)</div>
+            <div class="item-value">
+                {% set hoff = monthly.get('handoff_requests', 0) %}
+                {% set tmsg = monthly.get('total_messages', 0) %}
+                {{ "%.1f"|format(hoff / tmsg * 100) if tmsg > 0 else 0 }}%
+            </div>
+        </div>
+        <div class="detail-item">
+            <div class="item-label">العملاء المهتمون حالياً</div>
+            <div class="item-value">{{ monthly.get('interested_customers', 0) }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="charts-grid">
+    <div class="chart-container">
+        <h3>توزيع النوايا (شهري)</h3>
+        <canvas id="intentsChart"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>العملاء الجدد مقابل المتكررين</h3>
+        <canvas id="customersChart"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var today = {{ today | tojson | safe }};
+    var weekly = {{ weekly | tojson | safe }};
+    var monthly = {{ monthly | tojson | safe }};
+    var def = {total_messages:0,inbound_messages:0,outbound_messages:0,new_customers:0,returning_customers:0,interested_customers:0,handoff_requests:0,total_leads:0,won_leads:0,auto_reply_rate:0,top_services:[],top_intents:[]};
+    today = today || def; weekly = weekly || def; monthly = monthly || def;
+
+    new Chart(document.getElementById('periodMessagesChart'), {
+        type: 'bar',
+        data: {
+            labels: ['يومي', 'أسبوعي', 'شهري'],
+            datasets: [{
+                label: 'الرسائل',
+                data: [today.total_messages, weekly.total_messages, monthly.total_messages],
+                backgroundColor: ['#4a9eff', '#00d4aa', '#ffaa00'],
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, grid: { color: '#2a2a4a' }, ticks: { color: '#888' } },
+                x: { grid: { display: false }, ticks: { color: '#888' } }
+            }
+        }
+    });
+
+    if (monthly.top_services && monthly.top_services.length) {
+        new Chart(document.getElementById('topServicesChart'), {
+            type: 'polarArea',
+            data: {
+                labels: monthly.top_services.map(function(s){return s.service}),
+                datasets: [{
+                    data: monthly.top_services.map(function(s){return s.count}),
+                    backgroundColor: ['#4a9eff', '#00d4aa', '#ffaa00', '#ff5555', '#aa66ff'],
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom', labels: { color: '#888', usePointStyle: true } } },
+                scales: { r: { grid: { color: '#2a2a4a' }, ticks: { display: false } } }
+            }
+        });
+    }
+
+    if (monthly.top_intents && monthly.top_intents.length) {
+        new Chart(document.getElementById('intentsChart'), {
+            type: 'doughnut',
+            data: {
+                labels: monthly.top_intents.map(function(i){return i.intent}),
+                datasets: [{
+                    data: monthly.top_intents.map(function(i){return i.count}),
+                    backgroundColor: ['#4a9eff', '#00d4aa', '#ffaa00', '#ff5555', '#aa66ff'],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom', labels: { color: '#888', usePointStyle: true } } }
+            }
+        });
+    }
+
+    new Chart(document.getElementById('customersChart'), {
+        type: 'bar',
+        data: {
+            labels: ['جدد', 'متكررون'],
+            datasets: [
+                { label: 'يومي', data: [today.new_customers, today.returning_customers || 0], backgroundColor: '#4a9eff', borderRadius: 4 },
+                { label: 'أسبوعي', data: [weekly.new_customers, weekly.returning_customers || 0], backgroundColor: '#00d4aa', borderRadius: 4 },
+                { label: 'شهري', data: [monthly.new_customers, monthly.returning_customers || 0], backgroundColor: '#ffaa00', borderRadius: 4 },
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom', labels: { color: '#888', usePointStyle: true } } },
+            scales: {
+                y: { beginAtZero: true, grid: { color: '#2a2a4a' }, ticks: { color: '#888' } },
+                x: { grid: { display: false }, ticks: { color: '#888' } }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

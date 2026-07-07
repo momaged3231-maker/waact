@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}المتابعات{% endblock %}
+{% block heading %}مهام المتابعة{% endblock %}
+
+{% block content %}
+<div class="cards">
+    <div class="card"><div class="label">قيد التنفيذ</div><div class="value">{{ counts.get('pending', 0) }}</div></div>
+    <div class="card"><div class="label">تمت</div><div class="value">{{ counts.get('completed', 0) }}</div></div>
+    <div class="card"><div class="label">متأخرة</div><div class="value">{{ overdue_count }}</div></div>
+</div>
+
+<div class="tasks-layout">
+    <section class="detail-card task-form-card">
+        <h2>متابعة جديدة</h2>
+        <form method="post" action="/tasks/create">
+            <div class="form-group">
+                <label>العميل</label>
+                <select name="customer_id" required>
+                    <option value="">اختر العميل</option>
+                    {% for customer in customers %}
+                    <option value="{{ customer.id }}">{{ customer.name or customer.phone }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>ربط بفرصة</label>
+                <select name="lead_id">
+                    <option value="">بدون</option>
+                    {% for lead in leads %}
+                    <option value="{{ lead.id }}">{{ lead.customer.name or lead.customer.phone if lead.customer else lead.id[:8] }} - {{ lead.service_interest or 'فرصة' }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>العنوان</label>
+                <input name="title" placeholder="مثال: متابعة عرض السعر" required>
+            </div>
+            <div class="form-group">
+                <label>الوصف</label>
+                <textarea name="description" placeholder="ملاحظات داخلية"></textarea>
+            </div>
+            <div class="form-group">
+                <label>وقت المتابعة</label>
+                <input type="datetime-local" name="due_at">
+            </div>
+            <div class="form-group">
+                <label>الأولوية</label>
+                <select name="priority">
+                    <option value="low">منخفضة</option>
+                    <option value="medium" selected>متوسطة</option>
+                    <option value="high">عالية</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>مسؤول</label>
+                <input name="assigned_to" placeholder="اسم الموظف">
+            </div>
+            <button class="btn btn-primary" type="submit">إضافة المهمة</button>
+        </form>
+    </section>
+
+    <section class="detail-card task-list-card">
+        <div class="task-tabs">
+            <a href="/tasks?status=pending" class="{% if current_status == 'pending' %}active{% endif %}">قيد التنفيذ</a>
+            <a href="/tasks?status=completed" class="{% if current_status == 'completed' %}active{% endif %}">تمت</a>
+            <a href="/tasks?status=" class="{% if not current_status %}active{% endif %}">الكل</a>
+        </div>
+
+        <div class="tasks-list">
+            {% for task in tasks %}
+            <article class="task-card priority-{{ task.priority }}">
+                <div class="task-main">
+                    <div>
+                        <h3>{{ task.title }}</h3>
+                        <p>{{ task.description or 'لا توجد ملاحظات' }}</p>
+                        <a href="/customer/{{ task.customer_id }}">{{ task.customer.name or task.customer.phone if task.customer else task.customer_id[:8] }}</a>
+                    </div>
+                    <span class="status status-{{ task.status }}">{{ task.status }}</span>
+                </div>
+                <div class="task-meta">
+                    <span>الأولوية: {{ task.priority }}</span>
+                    <span>المسؤول: {{ task.assigned_to or '-' }}</span>
+                    <span>الموعد: {{ task.due_at.strftime('%Y-%m-%d %H:%M') if task.due_at else '-' }}</span>
+                </div>
+                {% if task.status != 'completed' %}
+                <div class="task-actions">
+                    <form method="post" action="/tasks/{{ task.id }}/complete"><button class="btn btn-primary btn-small">تمت</button></form>
+                    <form method="post" action="/tasks/{{ task.id }}/snooze">
+                        <input type="hidden" name="days" value="1">
+                        <button class="btn btn-small">تأجيل يوم</button>
+                    </form>
+                    <form method="post" action="/tasks/{{ task.id }}/snooze">
+                        <input type="hidden" name="days" value="3">
+                        <button class="btn btn-small">تأجيل 3 أيام</button>
+                    </form>
+                </div>
+                {% endif %}
+            </article>
+            {% endfor %}
+            {% if not tasks %}
+            <div class="text-muted text-center" style="padding:50px">لا توجد مهام</div>
+            {% endif %}
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .tasks-layout { display:grid; grid-template-columns:360px 1fr; gap:20px; align-items:start; }
+    .task-form-card { position:sticky; top:20px; }
+    .task-tabs { display:flex; gap:10px; margin-bottom:16px; }
+    .task-tabs a { color:#aaa; text-decoration:none; background:#151528; border:1px solid #2a2a4a; padding:8px 12px; border-radius:10px; font-size:13px; }
+    .task-tabs a.active { background:#00d4aa; color:#06130f; border-color:#00d4aa; }
+    .tasks-list { display:flex; flex-direction:column; gap:12px; }
+    .task-card { background:#151528; border:1px solid #2a2a4a; border-right:4px solid #ffaa00; border-radius:12px; padding:15px; }
+    .task-card.priority-high { border-right-color:#ff6666; }
+    .task-card.priority-medium { border-right-color:#ffaa00; }
+    .task-card.priority-low { border-right-color:#00d4aa; }
+    .task-main { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
+    .task-main h3 { color:#fff; font-size:16px; margin-bottom:6px; }
+    .task-main p { color:#888; font-size:13px; margin-bottom:8px; }
+    .task-main a { color:#00d4aa; text-decoration:none; font-size:13px; }
+    .task-meta { display:flex; flex-wrap:wrap; gap:10px; color:#999; font-size:12px; margin-top:12px; border-top:1px solid #2a2a4a; padding-top:10px; }
+    .task-actions { display:flex; gap:8px; margin-top:12px; }
+    .task-actions form { display:inline; }
+    @media (max-width: 900px) { .tasks-layout { grid-template-columns:1fr; } .task-form-card { position:static; } }
+</style>
+{% endblock %}

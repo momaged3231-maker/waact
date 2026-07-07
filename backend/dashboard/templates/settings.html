@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}الإعدادات{% endblock %}
+{% block heading %}إعدادات النظام{% endblock %}
+
+{% block content %}
+{% if request.query_params.get('saved') == 'ai' %}
+<div class="settings-alert">تم حفظ إعدادات الذكاء الاصطناعي بنجاح.</div>
+{% endif %}
+
+<div class="settings-grid">
+    <div class="settings-card whatsapp-card">
+        <div class="card-head">
+            <div>
+                <h2>اتصال واتساب</h2>
+                <p>حالة WhatsApp Web والـ QR.</p>
+            </div>
+            {% if connector_status.connected %}
+            <span class="state-pill ok">متصل</span>
+            {% else %}
+            <span class="state-pill bad">غير متصل</span>
+            {% endif %}
+        </div>
+
+        {% if connector_status.connected %}
+        <div class="wa-status-row">
+            <span>رقم الواتساب</span>
+            <strong dir="ltr">{{ connector_status.info.wid if connector_status.info else '-' }}</strong>
+        </div>
+        <div class="wa-status-row">
+            <span>الاسم</span>
+            <strong>{{ connector_status.info.pushname if connector_status.info else '-' }}</strong>
+        </div>
+        {% elif qr_code %}
+        <p class="muted">امسح رمز QR من واتساب: الأجهزة المرتبطة → ربط جهاز.</p>
+        <div class="qr-box"><div id="qrContainer"></div></div>
+        <button onclick="refreshQR()" class="btn btn-primary">تحديث QR</button>
+        {% else %}
+        <p class="muted">شغّل WhatsApp Connector من مجلد `whatsapp-connector` ثم اضغط تحديث.</p>
+        <button onclick="refreshQR()" class="btn btn-primary">تحديث QR</button>
+        {% endif %}
+    </div>
+
+    <div class="settings-card fallback-card">
+        <div class="card-head">
+            <div>
+                <h2>نظام الـ AI Fallback</h2>
+                <p>لو provider خلص credit أو عمل rate limit، النظام ينتقل للتالي حسب الأولوية.</p>
+            </div>
+            <span class="state-pill {{ 'ok' if ai_settings.ready_count > 0 else 'warn' }}">
+                {{ ai_settings.ready_count }} جاهز
+            </span>
+        </div>
+        <div class="fallback-flow">
+            <div>رسالة العميل</div>
+            <div>→</div>
+            <div>Provider #1</div>
+            <div>→</div>
+            <div>لو فشل</div>
+            <div>→</div>
+            <div>Provider #2</div>
+        </div>
+        <p class="muted">الفشل يشمل: نفاد الرصيد، rate-limit، key غير صالح، timeout، أو خطأ 5xx.</p>
+    </div>
+</div>
+
+<form method="post" action="/settings/ai" class="settings-card ai-form">
+    <div class="ai-form-header">
+        <div>
+            <h2>مزودي الذكاء الاصطناعي</h2>
+            <p>فعّل أكثر من provider ورتبهم بالأولوية. اترك خانة API key فارغة للاحتفاظ بالمفتاح الحالي.</p>
+        </div>
+        <label class="fallback-toggle">
+            <input type="checkbox" name="fallback_enabled" {% if ai_settings.fallback_enabled %}checked{% endif %}>
+            <span>تفعيل الانتقال التلقائي</span>
+        </label>
+    </div>
+
+    <div class="governance-controls">
+        <label><input type="checkbox" name="auto_disable_enabled" {% if ai_settings.governance.auto_disable_enabled %}checked{% endif %}> إيقاف مؤقت للمزود بعد الفشل المتكرر</label>
+        <label>عدد مرات الفشل <input type="number" name="failure_threshold" min="1" max="20" value="{{ ai_settings.governance.failure_threshold }}"></label>
+        <label>مدة الإيقاف بالدقائق <input type="number" name="cooldown_minutes" min="1" max="1440" value="{{ ai_settings.governance.cooldown_minutes }}"></label>
+    </div>
+
+    <div class="providers-grid">
+        {% for provider in ai_settings.providers %}
+        <div class="provider-card {{ 'ready' if provider.ready else '' }}">
+            <div class="provider-top">
+                <div>
+                    <h3>{{ provider.name }}</h3>
+                    <span>{{ provider.category }}</span>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" name="{{ provider.id }}_enabled" {% if provider.enabled %}checked{% endif %}>
+                    <span></span>
+                </label>
+            </div>
+
+            <p class="provider-note">{{ provider.notes }}</p>
+
+            <div class="provider-status">
+                {% if provider.temporarily_disabled %}
+                <span class="dot warn-dot"></span> موقوف مؤقتاً
+                {% elif provider.ready %}
+                <span class="dot ok-dot"></span> جاهز
+                {% elif provider.enabled %}
+                <span class="dot warn-dot"></span> مفعّل بدون API key
+                {% else %}
+                <span class="dot off-dot"></span> غير مفعّل
+                {% endif %}
+                <small dir="ltr">{{ provider.masked_key }}</small>
+            </div>
+            {% if provider.failure_count or provider.last_error %}
+            <div class="provider-health">
+                failures: {{ provider.failure_count or 0 }}{% if provider.disabled_until %} · disabled until {{ provider.disabled_until }}{% endif %}
+                {% if provider.last_error %}<br><span>{{ provider.last_error }}</span>{% endif %}
+            </div>
+            {% endif %}
+
+            <div class="provider-fields">
+                <label>الأولوية</label>
+                <input type="number" min="1" name="{{ provider.id }}_priority" value="{{ provider.priority }}">
+
+                <label>Model</label>
+                <input dir="ltr" type="text" name="{{ provider.id }}_model" value="{{ provider.model }}">
+
+                <label>API Key</label>
+                <input dir="ltr" type="password" name="{{ provider.id }}_api_key" placeholder="{{ 'اتركه فارغاً للاحتفاظ بالمفتاح الحالي' if provider.has_key else 'ضع API key هنا' }}">
+
+                <label>Base URL</label>
+                <input dir="ltr" type="text" name="{{ provider.id }}_base_url" value="{{ provider.base_url }}">
+            </div>
+
+            <div class="provider-actions">
+                <a href="{{ provider.site }}" target="_blank" rel="noreferrer">Get Key</a>
+                <button type="button" onclick="testProvider('{{ provider.id }}', this)">اختبار</button>
+            </div>
+            <div id="test-{{ provider.id }}" class="test-result"></div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="save-row">
+        <button type="submit" class="btn btn-primary">حفظ إعدادات AI</button>
+        <span class="muted">التغييرات تطبق فوراً على الردود القادمة بدون restart.</span>
+    </div>
+</form>
+
+<div class="settings-card system-card">
+    <h2>إحصائيات النظام</h2>
+    <div class="detail-grid">
+        <div class="detail-item"><div class="item-label">قاعدة البيانات</div><div class="item-value">SQLite</div></div>
+        <div class="detail-item"><div class="item-label">قاعدة المتجهات</div><div class="item-value">ChromaDB</div></div>
+        <div class="detail-item"><div class="item-label">AI Fallback</div><div class="item-value">{{ 'مفعل' if ai_settings.fallback_enabled else 'متوقف' }}</div></div>
+        <div class="detail-item"><div class="item-label">Providers جاهزة</div><div class="item-value">{{ ai_settings.ready_count }}</div></div>
+        <div class="detail-item"><div class="item-label">لوحة التحكم</div><div class="item-value">FastAPI + Chart.js</div></div>
+        <div class="detail-item"><div class="item-label">النسخة</div><div class="item-value">MVP 1.0</div></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+    .settings-alert { background:#123c30; color:#00d4aa; border:1px solid #1f6d58; border-radius:12px; padding:12px 16px; margin-bottom:18px; }
+    .settings-grid { display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px; }
+    .settings-card { background:#1a1a2e; border:1px solid #2a2a4a; border-radius:14px; padding:22px; margin-bottom:20px; }
+    .card-head, .ai-form-header, .provider-top, .save-row { display:flex; align-items:flex-start; justify-content:space-between; gap:15px; }
+    .settings-card h2 { color:#fff; font-size:20px; margin-bottom:6px; }
+    .settings-card p, .muted { color:#8d8da8; font-size:13px; line-height:1.7; }
+    .state-pill { padding:5px 12px; border-radius:999px; font-size:12px; font-weight:700; white-space:nowrap; }
+    .state-pill.ok { background:#0e3c31; color:#00d4aa; }
+    .state-pill.bad { background:#3c1717; color:#ff6666; }
+    .state-pill.warn { background:#3a2a1a; color:#ffaa00; }
+    .wa-status-row { display:flex; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid #2a2a4a; }
+    .wa-status-row span { color:#888; font-size:12px; }
+    .wa-status-row strong { color:#fff; }
+    .qr-box { background:#fff; display:inline-block; padding:14px; border-radius:12px; margin:12px 0; }
+    .fallback-flow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:20px 0; direction:ltr; }
+    .fallback-flow div { background:#151528; border:1px solid #2a2a4a; color:#ddd; padding:8px 10px; border-radius:10px; font-size:12px; }
+    .fallback-toggle { display:flex; align-items:center; gap:8px; color:#fff; background:#151528; border:1px solid #2a2a4a; padding:9px 12px; border-radius:10px; cursor:pointer; }
+    .governance-controls { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; background:#101020; border:1px solid #2a2a4a; border-radius:12px; padding:12px; color:#ddd; font-size:12px; }
+    .governance-controls label { display:flex; align-items:center; gap:8px; }
+    .governance-controls input[type="number"] { width:76px; background:#0f0f1a; color:#fff; border:1px solid #2a2a4a; border-radius:8px; padding:6px; }
+    .providers-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap:16px; margin-top:20px; }
+    .provider-card { background:#151528; border:1px solid #2a2a4a; border-radius:14px; padding:16px; }
+    .provider-card.ready { border-color:#1f6d58; box-shadow:0 0 0 1px rgba(0,212,170,.08); }
+    .provider-top h3 { color:#fff; font-size:17px; margin:0 0 4px; }
+    .provider-top span { color:#777; font-size:11px; }
+    .provider-note { min-height:44px; margin:12px 0; }
+    .provider-status { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#ddd; font-size:12px; background:#101020; border-radius:9px; padding:9px 10px; margin-bottom:12px; }
+    .provider-status small { color:#888; }
+    .provider-health { color:#ffb86b; background:#2b2118; border:1px solid #4a3825; border-radius:9px; padding:8px 10px; font-size:11px; margin-bottom:12px; direction:ltr; }
+    .provider-health span { color:#d6a16f; }
+    .dot { width:9px; height:9px; border-radius:50%; display:inline-block; margin-left:6px; }
+    .ok-dot { background:#00d4aa; }
+    .warn-dot { background:#ffaa00; }
+    .off-dot { background:#666; }
+    .provider-fields { display:grid; grid-template-columns: 90px 1fr; gap:8px 10px; align-items:center; }
+    .provider-fields label { color:#888; font-size:12px; }
+    .provider-fields input { width:100%; padding:8px 10px; background:#0f0f1a; border:1px solid #2a2a4a; border-radius:8px; color:#fff; font-size:12px; }
+    .provider-actions { display:flex; justify-content:space-between; align-items:center; margin-top:13px; }
+    .provider-actions a, .provider-actions button { color:#00d4aa; background:transparent; border:1px solid #24584d; border-radius:8px; padding:7px 10px; cursor:pointer; text-decoration:none; font-size:12px; }
+    .provider-actions button:hover, .provider-actions a:hover { background:#00d4aa18; }
+    .test-result { color:#aaa; font-size:12px; margin-top:10px; min-height:18px; }
+    .test-result.ok { color:#00d4aa; }
+    .test-result.bad { color:#ff6666; }
+    .switch { position:relative; width:48px; height:26px; display:inline-block; }
+    .switch input { display:none; }
+    .switch span { position:absolute; inset:0; background:#44445f; border-radius:30px; cursor:pointer; transition:.2s; }
+    .switch span:before { content:""; position:absolute; width:20px; height:20px; top:3px; right:3px; background:#fff; border-radius:50%; transition:.2s; }
+    .switch input:checked + span { background:#00d4aa; }
+    .switch input:checked + span:before { right:25px; }
+    .save-row { align-items:center; margin-top:20px; border-top:1px solid #2a2a4a; padding-top:18px; }
+    @media (max-width: 900px) {
+        .settings-grid { grid-template-columns:1fr; }
+        .ai-form-header, .save-row, .card-head { flex-direction:column; }
+        .providers-grid { grid-template-columns:minmax(0, 1fr); }
+        .settings-card { padding:16px; }
+        .governance-controls label { width:100%; justify-content:space-between; }
+    }
+    @media (max-width: 520px) {
+        .provider-fields { grid-template-columns:1fr; }
+        .provider-actions { flex-direction:column; align-items:stretch; gap:8px; }
+        .provider-actions a, .provider-actions button { text-align:center; }
+        .provider-status { align-items:flex-start; flex-direction:column; }
+        .qr-box { max-width:100%; overflow:hidden; }
+    }
+</style>
+<script>
+var qrInstance = null;
+
+function renderQR(text) {
+    var container = document.getElementById('qrContainer');
+    if (!container) return;
+    container.innerHTML = '';
+    qrInstance = new QRCode(container, {
+        text: text,
+        width: 220,
+        height: 220,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H,
+    });
+}
+
+function refreshQR() {
+    fetch('/api/whatsapp/qr')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.qr) renderQR(data.qr);
+            else alert('رمز QR غير متوفر حالياً. تأكد من تشغيل WhatsApp Connector.');
+        })
+        .catch(function() { alert('فشل الاتصال بـ WhatsApp Connector'); });
+}
+
+function testProvider(providerId, btn) {
+    var result = document.getElementById('test-' + providerId);
+    result.className = 'test-result';
+    result.textContent = 'جاري الاختبار...';
+    btn.disabled = true;
+    fetch('/settings/ai/test/' + providerId, { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                result.className = 'test-result ok';
+                result.textContent = 'متصل: ' + data.provider + ' / ' + data.model;
+            } else {
+                result.className = 'test-result bad';
+                result.textContent = 'فشل: ' + data.error;
+            }
+        })
+        .catch(function() {
+            result.className = 'test-result bad';
+            result.textContent = 'فشل الاتصال بسيرفر الاختبار';
+        })
+        .finally(function() { btn.disabled = false; });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var qrCode = {% if qr_code %}{{ qr_code | tojson | safe }}{% else %}null{% endif %};
+    if (qrCode) renderQR(qrCode);
+});
+</script>
+{% endblock %}

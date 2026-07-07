@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}التحويلات{% endblock %}
+{% block heading %}إدارة طلبات التحويل{% endblock %}
+
+{% block content %}
+<div class="filter-bar">
+    <form method="get" class="flex flex-wrap gap-10">
+        <select name="status" onchange="this.form.submit()">
+            <option value="pending" {% if current_status == 'pending' %}selected{% endif %}>بانتظار الرد</option>
+            <option value="accepted" {% if current_status == 'accepted' %}selected{% endif %}>مقبول</option>
+            <option value="resolved" {% if current_status == 'resolved' %}selected{% endif %}>تم الحل</option>
+            <option value="rejected" {% if current_status == 'rejected' %}selected{% endif %}>مرفوض</option>
+            <option value="" {% if not current_status %}selected{% endif %}>الكل</option>
+        </select>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>العميل</th>
+            <th>السبب</th>
+            <th>الحالة</th>
+            <th>مسؤول</th>
+            <th>ملخص المحادثة</th>
+            <th>التاريخ</th>
+            <th>الإجراء</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for h in handoffs %}
+        <tr>
+            <td>
+                <a href="/customer/{{ h.customer_id }}" style="color:#00d4aa;text-decoration:none">
+                    {{ h.customer.name or h.customer.phone[:15] if h.customer else h.customer_id[:8] }}
+                </a>
+            </td>
+            <td style="max-width:200px">{{ h.reason[:100] }}{% if h.reason|length > 100 %}...{% endif %}</td>
+            <td><span class="status status-{{ h.status }}">{{ h.status }}</span></td>
+            <td>{{ h.assigned_to or '-' }}</td>
+            <td class="text-muted" style="max-width:200px;font-size:12px">
+                {{ h.conversation_summary[:80] if h.conversation_summary else '-' }}
+            </td>
+            <td class="text-muted">{{ h.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>
+                {% if h.status == 'pending' %}
+                <form method="post" action="/handoffs/accept/{{ h.id }}" style="display:inline">
+                    <input type="hidden" name="assigned_to" value="agent">
+                    <button type="submit" class="btn btn-primary btn-small">قبول</button>
+                </form>
+                {% elif h.status == 'accepted' %}
+                <form method="post" action="/handoffs/resolve/{{ h.id }}" style="display:inline">
+                    <button type="submit" class="btn btn-primary btn-small">حل</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not handoffs %}
+        <tr><td colspan="7" class="text-center text-muted" style="padding:40px">لا توجد طلبات تحويل</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

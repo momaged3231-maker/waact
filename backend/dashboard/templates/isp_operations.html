@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}عمليات ISP{% endblock %}
+{% block heading %}الاشتراكات والراوترات{% endblock %}
+
+{% block content %}
+<div class="cards">
+    <div class="card"><div class="label">Radius Users</div><div class="value">{{ stats.radius_total }}</div><div class="sub">Active {{ stats.radius_active }} / Expired {{ stats.radius_expired }}</div></div>
+    <div class="card"><div class="label">Online</div><div class="value">{{ stats.radius_online }}</div><div class="sub">حسب آخر sync</div></div>
+    <div class="card"><div class="label">Static Routers</div><div class="value">{{ stats.routers_static }}</div><div class="sub">Auto Discovery: {{ 'ON' if auto_settings.enabled else 'OFF' }}</div></div>
+    <div class="card"><div class="label">WiFi Requests</div><div class="value">{{ stats.wifi_pending }}</div><div class="sub">طلبات مفتوحة</div></div>
+</div>
+
+<section class="detail-card">
+    <h2>بحث سريع عن عميل</h2>
+    <form method="get" action="/isp" class="lookup-row">
+        <input dir="ltr" name="q" value="{{ query }}" placeholder="رقم واتساب / Username / ID">
+        <button class="btn btn-primary">بحث</button>
+    </form>
+    <p class="text-muted">هذه الصفحة مخصصة للموظف: يعرف حالة الاشتراك، IP الحالي، وهل الراوتر متاح للتعامل التلقائي.</p>
+</section>
+
+{% if query %}
+<div class="isp-grid">
+    <section class="detail-card">
+        <h2>الاشتراك</h2>
+        {% if radius_error %}<div class="error-box">{{ radius_error }}</div>{% endif %}
+        {% set snapshot = radius_lookup.snapshot if radius_lookup else none %}
+        {% if snapshot %}
+        <div class="detail-grid">
+            <div class="detail-item"><div class="item-label">Username</div><div class="item-value" dir="ltr">{{ snapshot.username or snapshot.external_id }}</div></div>
+            <div class="detail-item"><div class="item-label">Status</div><div class="item-value">{{ snapshot.status }}</div></div>
+            <div class="detail-item"><div class="item-label">Package</div><div class="item-value">{{ snapshot.package_name or '-' }}</div></div>
+            <div class="detail-item"><div class="item-label">Expiry</div><div class="item-value">{{ snapshot.expires_at.strftime('%Y-%m-%d') if snapshot.expires_at else '-' }}</div></div>
+            <div class="detail-item"><div class="item-label">Online</div><div class="item-value">{{ 'online' if snapshot.online else 'offline' }}</div></div>
+            <div class="detail-item"><div class="item-label">Current IP</div><div class="item-value" dir="ltr">{{ snapshot.ip_address or '-' }}</div></div>
+        </div>
+        {% elif radius_lookup and radius_lookup.candidates %}
+        <p class="text-muted">وجدت أكثر من حساب محتمل. اربط الحساب من صفحة Radius المتقدمة.</p>
+        {% else %}
+        <p class="text-muted">لا يوجد اشتراك مربوط أو إعدادات Radius/DMA غير مكتملة.</p>
+        {% endif %}
+    </section>
+
+    <section class="detail-card">
+        <h2>الراوتر الحالي</h2>
+        {% if router_lookup %}
+        <div class="detail-grid">
+            <div class="detail-item"><div class="item-label">Router</div><div class="item-value">{{ router_lookup.name }}</div></div>
+            <div class="detail-item"><div class="item-label">Protocol</div><div class="item-value">{{ router_lookup.protocol }}</div></div>
+            <div class="detail-item"><div class="item-label">Host</div><div class="item-value" dir="ltr">{{ router_lookup.host or '-' }}</div></div>
+            <div class="detail-item"><div class="item-label">Source</div><div class="item-value">{{ router_lookup.host_source or 'static' }}</div></div>
+        </div>
+        {% elif discovery and discovery.host %}
+        <p>تم اكتشاف IP الحالي: <strong dir="ltr">{{ discovery.host }}</strong></p>
+        <p class="text-muted">المصدر: {{ discovery.source }}</p>
+        {% else %}
+        <p class="text-muted">لم يتم اكتشاف IP حالي. تأكد من DMA/Radius sessions أو MikroTik PPP active.</p>
+        {% endif %}
+        <div class="quick-links">
+            <a class="btn btn-small" href="/radius">إعدادات Radius</a>
+            <a class="btn btn-small" href="/routers">إعدادات Routers</a>
+        </div>
+    </section>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .lookup-row { display:grid; grid-template-columns:1fr auto; gap:10px; margin-bottom:10px; }
+    .lookup-row input { padding:10px 12px; background:#16162b; border:1px solid #2a2a4a; border-radius:8px; color:#fff; }
+    .isp-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
+    .error-box { background:#3a1a1a; color:#ff9999; border:1px solid #5a2424; border-radius:10px; padding:10px; margin-bottom:12px; }
+    .quick-links { display:flex; gap:8px; flex-wrap:wrap; margin-top:15px; }
+    @media (max-width:900px) { .lookup-row, .isp-grid { grid-template-columns:1fr; } }
+</style>
+{% endblock %}

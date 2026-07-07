@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{{ customer.name or customer.phone }}{% endblock %}
+{% block heading %}تفاصيل العميل{% endblock %}
+
+{% block content %}
+<div class="flex flex-wrap gap-10" style="margin-bottom:20px">
+    <div class="detail-card" style="flex:1">
+        <h2>معلومات العميل</h2>
+        <div class="detail-grid">
+            <div class="detail-item">
+                <div class="item-label">الاسم</div>
+                <div class="item-value">{{ customer.name or 'غير معروف' }}</div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">رقم الهاتف</div>
+                <div class="item-value" dir="ltr">{{ customer.phone }}</div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">الحالة</div>
+                <div class="item-value"><span class="status status-{{ customer.status }}">{{ customer.status }}</span></div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">الخدمة المهتم بها</div>
+                <div class="item-value">{{ customer.interested_service or '-' }}</div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">آخر نية</div>
+                <div class="item-value">{{ customer.last_intent or '-' }}</div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">آخر تواصل</div>
+                <div class="item-value">{{ customer.last_seen_at.strftime('%Y-%m-%d %H:%M') if customer.last_seen_at else '-' }}</div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">إجمالي الرسائل</div>
+                <div class="item-value">{{ customer.total_messages or 0 }}</div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">تحويل لموظف</div>
+                <div class="item-value">{{ 'نعم' if customer.is_handover else 'لا' }}</div>
+            </div>
+        </div>
+        <div style="margin-top:15px;padding-top:15px;border-top:1px solid #2a2a4a;display:flex;gap:8px;flex-wrap:wrap">
+            {% if customer.is_handover %}
+            <form method="post" action="/customer/{{ customer.id }}/handover/clear">
+                <button class="btn btn-primary btn-small">تشغيل الرد الآلي</button>
+            </form>
+            {% else %}
+            <form method="post" action="/customer/{{ customer.id }}/handover/pause">
+                <button class="btn btn-danger btn-small">إيقاف الرد الآلي لهذا العميل</button>
+            </form>
+            {% endif %}
+            <span class="text-muted">استخدمها لو المحادثة اتحولت لموظف وتريد رجوع البوت يرد تلقائياً.</span>
+        </div>
+        {% if customer.memory_summary %}
+        <div style="margin-top:15px;padding-top:15px;border-top:1px solid #2a2a4a">
+            <div class="item-label">ملخص الذاكرة</div>
+            <div style="margin-top:8px;color:#aaa;font-size:14px">{{ customer.memory_summary }}</div>
+        </div>
+        {% endif %}
+        {% if customer.notes %}
+        <div style="margin-top:15px;padding-top:15px;border-top:1px solid #2a2a4a">
+            <div class="item-label">ملاحظات</div>
+            <div style="margin-top:8px;color:#aaa;font-size:14px">{{ customer.notes }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if lead %}
+    <div class="detail-card" style="flex:1">
+        <h2>معلومات الفرصة</h2>
+        <div class="detail-grid">
+            <div class="detail-item">
+                <div class="item-label">حالة الفرصة</div>
+                <div class="item-value"><span class="status status-{{ lead.lead_status }}">{{ lead.lead_status }}</span></div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">الأولوية</div>
+                <div class="item-value"><span class="status status-{{ lead.priority }}">{{ lead.priority }}</span></div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">الخدمة</div>
+                <div class="item-value">{{ lead.service_interest or '-' }}</div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">مسؤول</div>
+                <div class="item-value">{{ lead.assigned_to or 'غير محدد' }}</div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">موعد المتابعة</div>
+                <div class="item-value">{{ lead.next_follow_up_at.strftime('%Y-%m-%d %H:%M') if lead.next_follow_up_at else '-' }}</div>
+            </div>
+            <div class="detail-item">
+                <div class="item-label">القيمة التقديرية</div>
+                <div class="item-value">{{ lead.estimated_value or '-' }}</div>
+            </div>
+        </div>
+        {% if lead.notes %}
+        <div style="margin-top:15px;padding-top:15px;border-top:1px solid #2a2a4a">
+            <div class="item-label">ملاحظات الفرصة</div>
+            <div style="margin-top:8px;color:#aaa;font-size:14px">{{ lead.notes }}</div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% if handoffs %}
+<div class="detail-card">
+    <h2>طلبات التحويل</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>السبب</th>
+                <th>الحالة</th>
+                <th>مسؤول</th>
+                <th>التاريخ</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for h in handoffs %}
+            <tr>
+                <td>{{ h.reason[:100] }}</td>
+                <td><span class="status status-{{ h.status }}">{{ h.status }}</span></td>
+                <td>{{ h.assigned_to or '-' }}</td>
+                <td class="text-muted">{{ h.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="detail-card">
+    <h2>المحادثات</h2>
+    <div class="chat-container">
+        {% for conv in conversations %}
+            {% if conv.direction == 'inbound' %}
+            <div style="display:flex; flex-direction:column; align-items:flex-start;">
+                <div class="msg-meta">العميل · {{ conv.created_at.strftime('%H:%M') }}</div>
+                <div class="msg-bubble-in">{{ conv.message_text }}</div>
+            </div>
+            {% else %}
+            <div style="display:flex; flex-direction:column; align-items:flex-end;">
+                <div class="msg-meta">البوت · {{ conv.created_at.strftime('%H:%M') }}</div>
+                <div class="msg-bubble-out">{{ conv.ai_response or conv.message_text }}</div>
+            </div>
+            {% endif %}
+        {% endfor %}
+        {% if not conversations %}
+        <div class="text-center text-muted" style="padding:40px">لا توجد محادثات</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

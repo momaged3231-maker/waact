@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}قاعدة المعرفة{% endblock %}
+{% block heading %}إدارة قاعدة المعرفة{% endblock %}
+
+{% block content %}
+<div class="flex flex-wrap gap-10" style="margin-bottom:20px">
+    <div class="detail-card" style="flex:1">
+        <h2>إضافة مستند جديد</h2>
+        <form method="post" action="/knowledge/ingest">
+            <div class="form-group">
+                <label>العنوان</label>
+                <input type="text" name="title" required placeholder="عنوان المستند">
+            </div>
+            <div class="form-group">
+                <label>التصنيف</label>
+                <select name="category" required>
+                    <option value="">اختر التصنيف</option>
+                    <option value="services">الخدمات</option>
+                    <option value="pricing">الأسعار</option>
+                    <option value="policies">السياسات</option>
+                    <option value="faq">الأسئلة المتكررة</option>
+                    <option value="offers">العروض</option>
+                    <option value="products">المنتجات</option>
+                    <option value="payment">طرق الدفع</option>
+                    <option value="coverage">مناطق الخدمة</option>
+                    <option value="scripts">سكريبتات البيع</option>
+                    <option value="objections">اعتراضات العملاء</option>
+                    <option value="general">عام</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>المحتوى</label>
+                <textarea name="content" required placeholder="محتوى المستند..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>المصدر (اختياري)</label>
+                <input type="text" name="source" placeholder="مثل: موقع الشركة، PDF، الخ">
+            </div>
+            <button type="submit" class="btn btn-primary">إضافة إلى قاعدة المعرفة</button>
+        </form>
+        {% if error %}
+        <div style="color:#ff5555;margin-top:10px;font-size:13px">{{ error }}</div>
+        {% endif %}
+    </div>
+
+    <div class="detail-card" style="flex:1">
+        <h2>التصفح والبحث</h2>
+        <div style="background:#151528;border:1px solid #2a2a4a;border-radius:12px;padding:14px;margin-bottom:15px">
+            <h3 style="font-size:15px;margin-bottom:10px;color:#fff">رفع ملف معرفة</h3>
+            <form method="post" action="/knowledge/upload" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label>الملف</label>
+                    <input type="file" name="file" accept=".txt,.md,.csv,.pdf,.docx" required>
+                </div>
+                <div class="form-group">
+                    <label>العنوان</label>
+                    <input name="title" placeholder="اتركه فارغاً لاستخدام اسم الملف">
+                </div>
+                <div class="form-group">
+                    <label>التصنيف</label>
+                    <select name="category">
+                        <option value="general">عام</option>
+                        <option value="services">الخدمات</option>
+                        <option value="pricing">الأسعار</option>
+                        <option value="faq">الأسئلة المتكررة</option>
+                        <option value="policies">السياسات</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" type="submit">رفع وفهرسة</button>
+                <div class="text-muted" style="margin-top:8px">TXT/MD/CSV مدعومة مباشرة. PDF/DOCX يحتاج مكتبات extraction إذا كانت مثبتة.</div>
+            </form>
+        </div>
+        <div class="filter-bar" style="margin-bottom:15px">
+            <form method="get" class="flex flex-wrap gap-10">
+                {% if show_inactive %}<input type="hidden" name="show_inactive" value="true">{% endif %}
+                <select name="category" onchange="this.form.submit()">
+                    <option value="">كل التصنيفات</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}" {% if current_category == cat %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+                {% if current_category %}
+                <a href="/knowledge{% if show_inactive %}?show_inactive=true{% endif %}">عرض الكل</a>
+                {% endif %}
+                {% if show_inactive %}
+                <a href="/knowledge{% if current_category %}?category={{ current_category }}{% endif %}">إخفاء المؤرشف</a>
+                {% else %}
+                <a href="/knowledge?show_inactive=true{% if current_category %}&category={{ current_category }}{% endif %}">عرض النسخ المؤرشفة</a>
+                {% endif %}
+            </form>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>العنوان</th>
+                    <th>التصنيف</th>
+                    <th>المصدر</th>
+                    <th>Version</th>
+                    <th>عدد الأجزاء</th>
+                    <th>آخر فهرسة</th>
+                    <th>الحالة</th>
+                    <th>الإجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr>
+                    <td>{{ doc.title }}</td>
+                    <td><span class="status status-{{ doc.category }}">{{ doc.category }}</span></td>
+                    <td class="text-muted">{{ doc.source or '-' }}</td>
+                    <td dir="ltr">v{{ doc.version or 1 }}</td>
+                    <td>{{ doc.chunk_count or 0 }}</td>
+                    <td class="text-muted">{{ doc.last_indexed_at.strftime('%Y-%m-%d %H:%M') if doc.last_indexed_at else 'غير مفهرس' }}</td>
+                    <td>{{ 'Active' if doc.is_active else 'Archived' }}</td>
+                    <td>
+                        {% if doc.is_active %}
+                        <form method="post" action="/knowledge/reindex/{{ doc.id }}" style="display:inline">
+                            <button type="submit" class="btn btn-small">إعادة فهرسة</button>
+                        </form>
+                        {% endif %}
+                        <form method="post" action="/knowledge/toggle/{{ doc.id }}" style="display:inline">
+                            <button type="submit" class="btn btn-small">{{ 'تعطيل' if doc.is_active else 'تفعيل' }}</button>
+                        </form>
+                        <form method="post" action="/knowledge/delete/{{ doc.id }}" style="display:inline" onsubmit="return confirm('هل أنت متأكد من حذف هذا المستند؟')">
+                            <button type="submit" class="btn btn-danger btn-small">حذف</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not documents %}
+                <tr><td colspan="8" class="text-center text-muted" style="padding:40px">لا توجد مستندات بعد. أضف مستنداً جديداً.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

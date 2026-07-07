@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Radius Manager{% endblock %}
+{% block heading %}DMA Radius Manager Integration{% endblock %}
+
+{% block content %}
+{% if request.query_params.get('saved') == 'true' %}
+<div class="radius-alert">تم حفظ إعدادات Radius.</div>
+{% endif %}
+
+<div class="radius-layout">
+    <section class="detail-card">
+        <h2>إعدادات الاتصال</h2>
+        <form method="post" action="/radius/settings">
+            <label class="inline-check"><input type="checkbox" name="enabled" {% if settings.enabled %}checked{% endif %}> تفعيل التكامل</label>
+            <div class="form-group"><label>Base URL</label><input dir="ltr" name="base_url" value="{{ settings.base_url }}" placeholder="https://radius.example.com"></div>
+            <div class="form-group">
+                <label>Auth Mode</label>
+                <select name="auth_mode">
+                    {% for mode in ['none','bearer','header','query','basic'] %}
+                    <option value="{{ mode }}" {% if settings.auth_mode == mode %}selected{% endif %}>{{ mode }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group"><label>API Key</label><input dir="ltr" type="password" name="api_key" placeholder="{{ settings.masked_api_key }}"></div>
+            <div class="form-group"><label>API Key Query Param</label><input dir="ltr" name="api_key_param" value="{{ settings.api_key_param }}"></div>
+            <div class="form-group"><label>Basic Username</label><input dir="ltr" name="username" value="{{ settings.username }}"></div>
+            <div class="form-group"><label>Basic Password</label><input dir="ltr" type="password" name="password" placeholder="{{ settings.masked_password }}"></div>
+            <div class="form-group"><label>Timeout Seconds</label><input type="number" name="timeout_seconds" min="2" max="60" value="{{ settings.timeout_seconds }}"></div>
+            <label class="inline-check"><input type="checkbox" name="verify_ssl" {% if settings.verify_ssl %}checked{% endif %}> Verify SSL</label>
+
+            <h3>Endpoints</h3>
+            <div class="form-group"><label>Search Path</label><input dir="ltr" name="search_path" value="{{ settings.search_path }}"></div>
+            <div class="form-group"><label>Detail Path</label><input dir="ltr" name="detail_path" value="{{ settings.detail_path }}"></div>
+            <div class="form-group"><label>Sessions Path</label><input dir="ltr" name="sessions_path" value="{{ settings.sessions_path }}"></div>
+
+            <h3>Actions Optional</h3>
+            {% for action, path in settings.action_paths.items() %}
+            <div class="form-group"><label>{{ action }}</label><input dir="ltr" name="action_{{ action }}" value="{{ path }}" placeholder="/api/subscribers/{external_id}/{{ action }}"></div>
+            {% endfor %}
+
+            <h3>Reminders</h3>
+            <label class="inline-check"><input type="checkbox" name="reminders_enabled" {% if settings.reminders_enabled %}checked{% endif %}> إرسال تنبيهات التجديد تلقائياً</label>
+            <div class="form-group"><label>قبل الانتهاء بأيام</label><input dir="ltr" name="reminder_days_before" value="{{ settings.reminder_days_before | join(',') }}"></div>
+            <div class="form-group"><label>بعد الانتهاء بأيام</label><input dir="ltr" name="expired_reminder_days_after" value="{{ settings.expired_reminder_days_after | join(',') }}"></div>
+            <div class="form-group"><label>رسالة التجديد</label><textarea name="renewal_message">{{ settings.renewal_message }}</textarea></div>
+
+            <h3>Field Mapping</h3>
+            <div class="mapping-grid">
+                {% for field, source in settings.field_map.items() %}
+                <label>{{ field }}</label><input dir="ltr" name="map_{{ field }}" value="{{ source }}">
+                {% endfor %}
+            </div>
+
+            <button class="btn btn-primary" type="submit">حفظ Radius</button>
+            <button class="btn" type="button" onclick="testRadius(this)">اختبار الاتصال</button>
+            <div id="radiusTest" class="test-result"></div>
+        </form>
+    </section>
+
+    <section class="detail-card">
+        <h2>بحث وربط مشترك</h2>
+        <form method="get" action="/radius" class="search-row">
+            <input name="q" value="{{ query }}" placeholder="رقم موبايل / username / ID">
+            <button class="btn btn-primary">بحث</button>
+        </form>
+        {% if search_error %}<div class="error-box">{{ search_error }}</div>{% endif %}
+        {% if results %}
+        <table>
+            <thead><tr><th>Username</th><th>Phone</th><th>Status</th><th>Package</th><th>Expiry</th><th>ربط</th></tr></thead>
+            <tbody>
+                {% for r in results %}
+                <tr>
+                    <td dir="ltr">{{ r.username or r.external_id }}</td>
+                    <td dir="ltr">{{ r.phone or '-' }}</td>
+                    <td>{{ r.status }}</td>
+                    <td>{{ r.package or '-' }}</td>
+                    <td>{{ r.expires_at.strftime('%Y-%m-%d') if r.expires_at else '-' }}</td>
+                    <td>
+                        <form method="post" action="/radius/link" class="inline-form">
+                            <input type="hidden" name="external_id" value="{{ r.external_id }}">
+                            <input type="hidden" name="username" value="{{ r.username }}">
+                            <input type="hidden" name="package_name" value="{{ r.package }}">
+                            <input type="hidden" name="status" value="{{ r.status }}">
+                            <input name="phone" value="{{ r.phone or query }}" placeholder="WhatsApp phone">
+                            <button class="btn btn-small btn-primary">ربط</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        <h2 style="margin-top:25px">آخر Snapshots</h2>
+        <table>
+            <thead><tr><th>Username</th><th>Phone</th><th>Status</th><th>Package</th><th>Expiry</th><th>Online</th><th>Current IP</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for s in snapshots %}
+                <tr>
+                    <td dir="ltr">{{ s.username or s.external_id }}</td>
+                    <td dir="ltr">{{ s.phone or '-' }}</td>
+                    <td>{{ s.status }}</td>
+                    <td>{{ s.package_name or '-' }}</td>
+                    <td>{{ s.expires_at.strftime('%Y-%m-%d') if s.expires_at else '-' }}</td>
+                    <td>{{ 'online' if s.online else 'offline' }}</td>
+                    <td dir="ltr">{{ s.ip_address or '-' }}</td>
+                    <td><form method="post" action="/radius/{{ s.external_id }}/refresh"><button class="btn btn-small">Refresh</button></form></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+</div>
+
+<div class="detail-card">
+    <h2>Linked Customers</h2>
+    <table>
+        <thead><tr><th>Customer</th><th>Phone</th><th>Username</th><th>External ID</th><th>Updated</th></tr></thead>
+        <tbody>
+            {% for link in links %}
+            <tr>
+                <td>{{ link.customer.name if link.customer else '-' }}</td>
+                <td dir="ltr">{{ link.customer.phone if link.customer else link.phone }}</td>
+                <td dir="ltr">{{ link.username }}</td>
+                <td dir="ltr">{{ link.external_id }}</td>
+                <td>{{ link.updated_at.strftime('%Y-%m-%d %H:%M') if link.updated_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="detail-card">
+    <h2>Sync Logs</h2>
+    <table>
+        <thead><tr><th>وقت</th><th>Action</th><th>External ID</th><th>Success</th><th>Message</th></tr></thead>
+        <tbody>
+            {% for log in logs %}
+            <tr><td>{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ log.action }}</td><td dir="ltr">{{ log.external_id or '-' }}</td><td>{{ 'yes' if log.success else 'no' }}</td><td>{{ log.message or '-' }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .radius-layout { display:grid; grid-template-columns:420px 1fr; gap:20px; align-items:start; }
+    .radius-alert { background:#123c30; color:#00d4aa; border:1px solid #1f6d58; border-radius:12px; padding:12px 16px; margin-bottom:18px; }
+    .inline-check { display:flex; gap:8px; align-items:center; color:#ddd; margin-bottom:12px; }
+    .mapping-grid { display:grid; grid-template-columns:130px 1fr; gap:8px; margin-bottom:16px; align-items:center; }
+    .mapping-grid label { color:#888; font-size:12px; }
+    .mapping-grid input, .search-row input, .inline-form input { padding:8px 10px; background:#0f0f1a; color:#fff; border:1px solid #2a2a4a; border-radius:8px; }
+    .search-row { display:grid; grid-template-columns:1fr auto; gap:10px; margin-bottom:14px; }
+    .inline-form { display:flex; gap:7px; align-items:center; }
+    .test-result { margin-top:10px; color:#aaa; font-size:12px; }
+    .error-box { background:#3a1a1a; color:#ff7777; border:1px solid #5a2424; border-radius:10px; padding:10px; margin-bottom:12px; }
+    @media (max-width:900px) { .radius-layout { grid-template-columns:1fr; } .search-row, .mapping-grid { grid-template-columns:1fr; } .inline-form { flex-direction:column; align-items:stretch; } }
+</style>
+<script>
+function testRadius(btn) {
+    var result = document.getElementById('radiusTest');
+    result.textContent = 'جاري الاختبار...';
+    btn.disabled = true;
+    fetch('/radius/test', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) { result.textContent = data.ok ? 'تم الاتصال بنجاح' : ('فشل: ' + data.error); })
+        .catch(function(e) { result.textContent = 'فشل: ' + e.message; })
+        .finally(function() { btn.disabled = false; });
+}
+</script>
+{% endblock %}

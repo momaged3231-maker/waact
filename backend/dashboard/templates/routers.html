@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Routers{% endblock %}
+{% block heading %}Router & WiFi Management{% endblock %}
+
+{% block content %}
+{% set auto_settings = auto_settings|default({}) %}
+{% if request.query_params.get('auto_saved') == 'true' %}
+<div class="router-alert">تم حفظ إعدادات Auto Discovery.</div>
+{% endif %}
+
+<section class="detail-card auto-discovery-card">
+    <div class="auto-head">
+        <div>
+            <h2>Auto Discovery من DMA/Radius أو MikroTik</h2>
+            <p class="text-muted">بدل إضافة راوتر لكل عميل، السيستم يجيب IP الراوتر الحالي من جلسة الاشتراك ثم يستخدم template عام للتنفيذ.</p>
+        </div>
+        <label class="inline-check"><input form="autoDiscoveryForm" type="checkbox" name="auto_enabled" {% if auto_settings.enabled %}checked{% endif %}> تفعيل Auto Discovery</label>
+    </div>
+    <form id="autoDiscoveryForm" method="post" action="/routers/auto-settings" class="auto-grid">
+        <div class="form-group"><label>ترتيب المصادر</label><input dir="ltr" name="source_order" value="{{ auto_settings.source_order_text }}"><small>مثال: radius_sessions,radius_snapshot,mikrotik_ppp</small></div>
+        <div class="form-group"><label>DMA/Radius IP Fields</label><input dir="ltr" name="session_ip_fields" value="{{ auto_settings.session_ip_fields_text }}"><small>أسماء الحقول التي تحمل IP العميل في session/detail.</small></div>
+        <div class="form-group"><label>Default Router Name</label><input name="default_name" value="{{ auto_settings.default_name }}"></div>
+        <div class="form-group"><label>Default Model</label><input name="default_model" value="{{ auto_settings.default_model }}"></div>
+        <div class="form-group">
+            <label>Default Protocol</label>
+            <select name="default_protocol">
+                {% for protocol in ['tplink_web','huawei_web','http_json','manual'] %}
+                <option value="{{ protocol }}" {% if auto_settings.default_protocol == protocol %}selected{% endif %}>{{ protocol }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group"><label>Scheme</label><select name="scheme"><option value="http" {% if auto_settings.scheme == 'http' %}selected{% endif %}>http</option><option value="https" {% if auto_settings.scheme == 'https' %}selected{% endif %}>https</option></select></div>
+        <div class="form-group"><label>CPE Remote Port</label><input type="number" name="auto_port" min="1" max="65535" value="{{ auto_settings.port }}"></div>
+        <div class="form-group"><label>CPE Username</label><input dir="ltr" name="auto_username" value="{{ auto_settings.username }}"></div>
+        <div class="form-group"><label>CPE Password</label><input dir="ltr" type="password" name="auto_password" placeholder="{{ auto_settings.masked_password }}"></div>
+        <div class="form-group"><label>Default SSID optional</label><input name="auto_ssid" value="{{ auto_settings.ssid }}"></div>
+        <div class="form-group"><label>HTTP Method</label><select name="auto_http_method"><option {% if auto_settings.http_method == 'POST' %}selected{% endif %}>POST</option><option {% if auto_settings.http_method == 'PUT' %}selected{% endif %}>PUT</option><option {% if auto_settings.http_method == 'PATCH' %}selected{% endif %}>PATCH</option></select></div>
+        <div class="form-group"><label>Change Password Path</label><input dir="ltr" name="auto_http_change_password_path" value="{{ auto_settings.http_change_password_path }}" placeholder="/api/wifi/password"></div>
+        <div class="form-group auto-wide"><label>Payload Template</label><textarea dir="ltr" name="auto_http_payload_template">{{ auto_settings.http_payload_template }}</textarea></div>
+        <div class="form-group"><label>Status Path</label><input dir="ltr" name="auto_http_status_path" value="{{ auto_settings.http_status_path }}"></div>
+        <div class="form-group"><label>Reboot Path</label><input dir="ltr" name="auto_http_reboot_path" value="{{ auto_settings.http_reboot_path }}"></div>
+
+        <div class="auto-wide separator"><h3>MikroTik PPP Active Lookup</h3></div>
+        <label class="inline-check"><input type="checkbox" name="mikrotik_enabled" {% if auto_settings.mikrotik_enabled %}checked{% endif %}> تفعيل قراءة IP من MikroTik PPP Active</label>
+        <div class="form-group"><label>Method</label><select name="mikrotik_method"><option value="ssh" {% if auto_settings.mikrotik_method == 'ssh' %}selected{% endif %}>ssh</option><option value="rest" {% if auto_settings.mikrotik_method == 'rest' %}selected{% endif %}>rest</option></select></div>
+        <div class="form-group"><label>MikroTik Host</label><input dir="ltr" name="mikrotik_host" value="{{ auto_settings.mikrotik_host }}"></div>
+        <div class="form-group"><label>MikroTik Port</label><input type="number" name="mikrotik_port" min="1" max="65535" value="{{ auto_settings.mikrotik_port }}"></div>
+        <div class="form-group"><label>MikroTik Username</label><input dir="ltr" name="mikrotik_username" value="{{ auto_settings.mikrotik_username }}"></div>
+        <div class="form-group"><label>MikroTik Password</label><input dir="ltr" type="password" name="mikrotik_password" placeholder="{{ auto_settings.masked_mikrotik_password }}"></div>
+        <div class="form-group"><label>Timeout Seconds</label><input type="number" name="mikrotik_timeout_seconds" min="2" max="60" value="{{ auto_settings.mikrotik_timeout_seconds }}"></div>
+        <label class="inline-check"><input type="checkbox" name="mikrotik_use_ssl" {% if auto_settings.mikrotik_use_ssl %}checked{% endif %}> REST HTTPS</label>
+        <label class="inline-check"><input type="checkbox" name="mikrotik_verify_ssl" {% if auto_settings.mikrotik_verify_ssl %}checked{% endif %}> Verify REST SSL</label>
+        <div class="auto-actions auto-wide">
+            <button class="btn btn-primary">حفظ Auto Discovery</button>
+            <input id="discoverPhone" dir="ltr" placeholder="رقم عميل للاختبار">
+            <button type="button" class="btn" onclick="testDiscovery()">اختبار Discovery</button>
+            <span id="discoverResult" class="text-muted"></span>
+        </div>
+    </form>
+</section>
+
+<div class="router-layout">
+    <section class="detail-card router-form-card">
+        <h2>ربط راوتر بعميل</h2>
+        <form method="post" action="/routers/create">
+            <div class="form-group">
+                <label>عميل موجود اختياري</label>
+                <select name="customer_id">
+                    <option value="">اختيار برقم واتساب بدلاً من ذلك</option>
+                    {% for c in customers %}
+                    <option value="{{ c.id }}">{{ c.phone }}{% if c.name %} - {{ c.name }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group"><label>رقم واتساب لو العميل غير موجود</label><input dir="ltr" name="customer_phone" placeholder="2010..."></div>
+            <div class="form-group"><label>Radius External ID اختياري</label><input dir="ltr" name="radius_external_id"></div>
+            <div class="form-group"><label>اسم الراوتر</label><input name="name" required placeholder="Router العميل"></div>
+            <div class="form-group"><label>Model</label><input name="model" placeholder="MikroTik / Huawei / ZTE"></div>
+            <div class="form-group">
+                <label>Protocol</label>
+                <select name="protocol">
+                    <option value="manual">Manual / Handoff only</option>
+                    <option value="http_json">HTTP JSON</option>
+                    <option value="tplink_web">TP-Link Web/API</option>
+                    <option value="huawei_web">Huawei Web/API</option>
+                    <option value="ssh">SSH</option>
+                    <option value="mikrotik_ssh">MikroTik SSH Template</option>
+                    <option value="tr069">TR-069/ACS Hook</option>
+                </select>
+            </div>
+            <p class="router-hint">TP-Link وHuawei غالباً لا يملكون API موحد. استخدم TP-Link/Huawei Web/API فقط بعد معرفة endpoint الخاص بالموديل، أو استخدم TR-069/ACS لو متاح من الشبكة.</p>
+            <div class="form-group"><label>Host/IP</label><input dir="ltr" name="host" placeholder="10.0.0.1"></div>
+            <div class="form-group"><label>Port</label><input type="number" name="port" placeholder="22 / 80 / 443"></div>
+            <div class="form-group"><label>Username</label><input dir="ltr" name="username"></div>
+            <div class="form-group"><label>Password</label><input dir="ltr" type="password" name="password"></div>
+            <div class="form-group"><label>SSID</label><input name="ssid" placeholder="Home WiFi"></div>
+            <div class="form-group"><label>WiFi Interface</label><input dir="ltr" name="wifi_interface" placeholder="wlan1"></div>
+            <div class="form-group"><label>WiFi Profile/Security Name</label><input dir="ltr" name="wifi_profile" placeholder="default"></div>
+
+            <h3>HTTP JSON</h3>
+            <div class="form-group"><label>HTTP Method</label><select name="http_method"><option>POST</option><option>PUT</option><option>PATCH</option></select></div>
+            <div class="form-group"><label>Change Password Path</label><input dir="ltr" name="http_change_password_path" placeholder="/api/wifi/password"></div>
+            <div class="form-group"><label>Payload Template</label><textarea dir="ltr" name="http_payload_template">{"wifi_password":"${password}","ssid":"${ssid}"}</textarea></div>
+            <div class="form-group"><label>Status Path</label><input dir="ltr" name="http_status_path" placeholder="/api/status"></div>
+            <div class="form-group"><label>Reboot Path</label><input dir="ltr" name="http_reboot_path" placeholder="/api/reboot"></div>
+
+            <h3>SSH Templates</h3>
+            <div class="form-group"><label>Change Password Command</label><textarea dir="ltr" name="ssh_change_password_command" placeholder='/interface wireless security-profiles set [find name="${profile}"] wpa2-pre-shared-key="${password}"'></textarea></div>
+            <div class="form-group"><label>Reboot Command</label><textarea dir="ltr" name="ssh_reboot_command" placeholder="/system reboot"></textarea></div>
+            <label class="inline-check"><input type="checkbox" name="enabled" checked> مفعّل</label>
+            <button class="btn btn-primary">إضافة راوتر</button>
+        </form>
+    </section>
+
+    <section class="detail-card">
+        <h2>الراوترات</h2>
+        <table>
+            <thead><tr><th>العميل</th><th>الاسم</th><th>Protocol</th><th>Host</th><th>SSID</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for r in routers %}
+            <tr>
+                <td dir="ltr">{{ r.customer.phone if r.customer else '-' }}</td>
+                <td>{{ r.name }}</td>
+                <td>{{ r.protocol }}</td>
+                <td dir="ltr">{{ r.host or '-' }}{% if r.port %}:{{ r.port }}{% endif %}</td>
+                <td>{{ r.ssid or '-' }}</td>
+                <td>{{ 'enabled' if r.enabled else 'disabled' }}{% if r.last_status %}<br><span class="text-muted">{{ r.last_status }}</span>{% endif %}{% if r.last_error %}<br><span class="text-muted">{{ r.last_error[:100] }}</span>{% endif %}</td>
+                <td class="router-actions">
+                    <form method="post" action="/routers/{{ r.id }}/test"><button class="btn btn-small">Test</button></form>
+                    <form method="post" action="/routers/{{ r.id }}/reboot"><button class="btn btn-small">Reboot</button></form>
+                    <form method="post" action="/routers/{{ r.id }}/toggle"><button class="btn btn-small">{{ 'Disable' if r.enabled else 'Enable' }}</button></form>
+                    <form method="post" action="/routers/{{ r.id }}/delete" onsubmit="return confirm('حذف الراوتر؟')"><button class="btn btn-danger btn-small">Delete</button></form>
+                    <form method="post" action="/routers/{{ r.id }}/change-wifi" class="password-form" onsubmit="return confirm('تغيير باسورد الواي فاي لهذا الراوتر؟')">
+                        <input name="new_password" placeholder="New WiFi password" required>
+                        <button class="btn btn-primary btn-small">Change WiFi</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not routers %}<tr><td colspan="7" class="text-center text-muted" style="padding:35px">لا توجد راوترات مربوطة بعد</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </section>
+</div>
+
+<div class="detail-card">
+    <h2>WiFi Password Requests</h2>
+    <table>
+        <thead><tr><th>Phone</th><th>Status</th><th>Router</th><th>Password</th><th>Expires</th><th>Created</th><th>Support Actions</th></tr></thead>
+        <tbody>
+            {% for p in pending %}
+            <tr>
+                <td dir="ltr">{{ p.phone }}</td>
+                <td><span class="request-status request-{{ p.status }}">{{ p.status }}</span></td>
+                <td>
+                    {% if p.router %}
+                        {{ p.router.name }}
+                    {% elif p.payload_json and p.payload_json.get('dynamic_router') %}
+                        Dynamic<br><span class="text-muted">{{ p.payload_json.get('host_source') or '-' }} · {{ p.payload_json.get('discovered_host') or '-' }}</span>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>{% if p.payload_json and p.payload_json.get('password_length') %}{{ p.payload_json.get('password_length') }} chars{% else %}-{% endif %}</td>
+                <td>{{ p.expires_at.strftime('%Y-%m-%d %H:%M') if p.expires_at else '-' }}</td>
+                <td>{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td class="manual-actions">
+                    {% if p.status in ['manual_required', 'failed', 'awaiting_confirm', 'awaiting_password'] %}
+                    <form method="post" action="/routers/pending/{{ p.id }}/complete" onsubmit="return confirm('تأكيد إكمال الطلب يدوياً؟')">
+                        <label><input type="checkbox" name="notify" checked> إبلاغ العميل</label>
+                        <input name="message" value="تم تنفيذ طلب تغيير باسورد الواي فاي من الدعم. لو الأجهزة فصلت، أعد الاتصال بالباسورد الجديد الذي طلبته.">
+                        <button class="btn btn-primary btn-small">Complete Manual</button>
+                    </form>
+                    <form method="post" action="/routers/pending/{{ p.id }}/close" onsubmit="return confirm('إغلاق الطلب؟')">
+                        <label><input type="checkbox" name="notify"> إبلاغ العميل</label>
+                        <input name="message" value="تم إغلاق طلب تغيير باسورد الواي فاي. لو ما زلت تحتاج مساعدة، ابعت لنا رسالة وسيتابع معك الدعم.">
+                        <button class="btn btn-danger btn-small">Close</button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted">No action</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not pending %}<tr><td colspan="7" class="text-center text-muted" style="padding:25px">لا توجد طلبات تغيير باسورد حالياً</td></tr>{% endif %}
+        </tbody>
+    </table>
+</div>
+
+<div class="detail-card">
+    <h2>Router Action Logs</h2>
+    <table>
+        <thead><tr><th>وقت</th><th>Phone</th><th>Action</th><th>Success</th><th>Message</th></tr></thead>
+        <tbody>
+            {% for log in logs %}
+            <tr><td>{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td><td dir="ltr">{{ log.phone or '-' }}</td><td>{{ log.action }}</td><td>{{ 'yes' if log.success else 'no' }}</td><td>{{ log.message or '-' }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .router-alert { background:#123c30; color:#00d4aa; border:1px solid #1f6d58; border-radius:12px; padding:12px 16px; margin-bottom:18px; }
+    .auto-discovery-card { background:linear-gradient(135deg,#17172c,#111827); }
+    .auto-head { display:flex; justify-content:space-between; gap:15px; align-items:flex-start; margin-bottom:14px; }
+    .auto-grid { display:grid; grid-template-columns:repeat(4, minmax(160px, 1fr)); gap:12px; align-items:end; }
+    .auto-grid small { display:block; color:#777; margin-top:5px; font-size:11px; line-height:1.5; }
+    .auto-wide { grid-column:1 / -1; }
+    .separator { border-top:1px solid #2a2a4a; padding-top:12px; margin-top:4px; }
+    .auto-actions { display:flex; gap:9px; align-items:center; flex-wrap:wrap; }
+    .auto-actions input { padding:8px 10px; background:#0f0f1a; color:#fff; border:1px solid #2a2a4a; border-radius:8px; }
+    .router-layout { display:grid; grid-template-columns:420px 1fr; gap:20px; align-items:start; }
+    .router-form-card { max-height:none; }
+    .router-hint { background:#201a0f; border:1px solid #5a3d16; color:#ffd28a; border-radius:10px; padding:10px 12px; font-size:12px; line-height:1.7; margin:0 0 14px; }
+    .inline-check { display:flex; gap:8px; align-items:center; color:#ddd; margin-bottom:12px; }
+    .router-actions { display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+    .password-form { display:flex; gap:6px; align-items:center; flex-basis:100%; margin-top:6px; }
+    .password-form input { min-width:180px; padding:6px 8px; background:#0f0f1a; color:#fff; border:1px solid #2a2a4a; border-radius:7px; }
+    .request-status { display:inline-block; padding:4px 9px; border-radius:999px; background:#22233a; color:#ddd; font-size:11px; white-space:nowrap; }
+    .request-awaiting_password, .request-awaiting_confirm { background:#3a2a1a; color:#ffaa00; }
+    .request-manual_required, .request-failed { background:#3a1a1a; color:#ff8888; }
+    .request-completed, .request-completed_manual { background:#153a28; color:#00d4aa; }
+    .request-cancelled, .request-closed { background:#2a2a3a; color:#aaa; }
+    .manual-actions { min-width:280px; }
+    .manual-actions form { display:grid; grid-template-columns:auto 1fr auto; gap:7px; align-items:center; margin-bottom:7px; }
+    .manual-actions label { color:#aaa; font-size:11px; display:flex; gap:5px; align-items:center; white-space:nowrap; }
+    .manual-actions input[name="message"] { min-width:180px; padding:6px 8px; background:#0f0f1a; color:#fff; border:1px solid #2a2a4a; border-radius:7px; font-size:12px; }
+    @media (max-width:900px) { .router-layout, .auto-grid { grid-template-columns:1fr; } .auto-head { flex-direction:column; } .password-form { flex-direction:column; align-items:stretch; } .password-form input { width:100%; } }
+</style>
+<script>
+function testDiscovery() {
+    var phone = document.getElementById('discoverPhone').value.trim();
+    var result = document.getElementById('discoverResult');
+    if (!phone) { result.textContent = 'اكتب رقم عميل للاختبار'; return; }
+    result.textContent = 'جاري البحث...';
+    fetch('/api/routers/discover?phone=' + encodeURIComponent(phone))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success) {
+                result.textContent = 'لم يتم العثور على IP حالي. تأكد من Radius session أو MikroTik PPP active.';
+                return;
+            }
+            result.textContent = 'IP: ' + data.discovery.host + ' · Source: ' + data.discovery.source + ' · User: ' + (data.discovery.username || '-');
+        })
+        .catch(function(e) { result.textContent = 'فشل: ' + e.message; });
+}
+</script>
+{% endblock %}

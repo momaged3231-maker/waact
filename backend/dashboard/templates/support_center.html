@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}الدعم والطلبات{% endblock %}
+{% block heading %}الدعم والطلبات{% endblock %}
+
+{% block content %}
+<div class="cards support-summary">
+    <div class="card"><div class="label">طلبات دعم مفتوحة</div><div class="value">{{ handoffs|length }}</div><div class="sub">تحويلات تحتاج متابعة</div></div>
+    <div class="card"><div class="label">طلبات WiFi</div><div class="value">{{ wifi_requests|length }}</div><div class="sub">يدوي أو منتظر تأكيد</div></div>
+    <div class="card"><div class="label">متابعات</div><div class="value">{{ tasks|length }}</div><div class="sub">مهام لم تنته بعد</div></div>
+</div>
+
+<div class="support-grid">
+    <section class="detail-card">
+        <h2>طلبات الدعم</h2>
+        <table>
+            <thead><tr><th>العميل</th><th>السبب</th><th>الحالة</th><th>إجراء</th></tr></thead>
+            <tbody>
+                {% for h in handoffs %}
+                <tr>
+                    <td dir="ltr">{{ h.customer.phone if h.customer else '-' }}</td>
+                    <td>{{ h.reason[:120] }}</td>
+                    <td><span class="status status-{{ h.status }}">{{ h.status }}</span></td>
+                    <td class="actions-cell">
+                        {% if h.status == 'pending' %}
+                        <form method="post" action="/handoffs/accept/{{ h.id }}"><input type="hidden" name="return_to" value="/support"><button class="btn btn-small">استلام</button></form>
+                        {% endif %}
+                        <form method="post" action="/handoffs/resolve/{{ h.id }}"><input type="hidden" name="return_to" value="/support"><button class="btn btn-primary btn-small">حل الطلب</button></form>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not handoffs %}<tr><td colspan="4" class="text-center text-muted" style="padding:30px">لا توجد طلبات دعم مفتوحة</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </section>
+
+    <section class="detail-card">
+        <h2>طلبات تغيير باسورد WiFi</h2>
+        <table>
+            <thead><tr><th>Phone</th><th>Status</th><th>Router</th><th>إجراء</th></tr></thead>
+            <tbody>
+                {% for p in wifi_requests %}
+                <tr>
+                    <td dir="ltr">{{ p.phone }}</td>
+                    <td><span class="status status-pending">{{ p.status }}</span></td>
+                    <td>{{ p.router.name if p.router else (p.payload_json.get('discovered_host') if p.payload_json else '-') }}</td>
+                    <td class="actions-cell">
+                        <form method="post" action="/routers/pending/{{ p.id }}/complete"><input type="hidden" name="return_to" value="/support"><button class="btn btn-primary btn-small">تم يدويًا</button></form>
+                        <form method="post" action="/routers/pending/{{ p.id }}/close"><input type="hidden" name="return_to" value="/support"><button class="btn btn-danger btn-small">إغلاق</button></form>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not wifi_requests %}<tr><td colspan="4" class="text-center text-muted" style="padding:30px">لا توجد طلبات WiFi مفتوحة</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </section>
+</div>
+
+<section class="detail-card">
+    <h2>المتابعات</h2>
+    <table>
+        <thead><tr><th>العميل</th><th>المهمة</th><th>الأولوية</th><th>الموعد</th><th>إجراء</th></tr></thead>
+        <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td dir="ltr">{{ task.customer.phone if task.customer else '-' }}</td>
+                <td>{{ task.title }}</td>
+                <td>{{ task.priority }}</td>
+                <td>{{ task.due_at.strftime('%Y-%m-%d %H:%M') if task.due_at else '-' }}</td>
+                <td><form method="post" action="/tasks/{{ task.id }}/complete"><input type="hidden" name="return_to" value="/support"><button class="btn btn-primary btn-small">تم</button></form></td>
+            </tr>
+            {% endfor %}
+            {% if not tasks %}<tr><td colspan="5" class="text-center text-muted" style="padding:30px">لا توجد متابعات مفتوحة</td></tr>{% endif %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .support-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
+    .actions-cell { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    @media (max-width:900px) { .support-grid { grid-template-columns:1fr; } }
+</style>
+{% endblock %}

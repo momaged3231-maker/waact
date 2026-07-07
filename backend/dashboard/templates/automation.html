@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Automation{% endblock %}
+{% block heading %}Automation Builder{% endblock %}
+
+{% block content %}
+<div class="automation-layout">
+    <section class="detail-card automation-form">
+        <h2>قاعدة جديدة</h2>
+        <form method="post" action="/automation/create">
+            <div class="form-group"><label>الاسم</label><input name="name" required></div>
+            <div class="form-group"><label>Trigger</label><select name="trigger"><option value="inbound_message">رسالة واردة</option></select></div>
+            <div class="form-group">
+                <label>Condition</label>
+                <select name="condition_type">
+                    <option value="always">دائماً</option>
+                    <option value="message_contains">الرسالة تحتوي</option>
+                    <option value="customer_status">حالة العميل</option>
+                    <option value="intent">Intent</option>
+                </select>
+            </div>
+            <div class="form-group"><label>Condition Value</label><input name="condition_value" placeholder="مثال: السعر"></div>
+            <div class="form-group">
+                <label>Action</label>
+                <select name="action_type">
+                    <option value="create_task">إنشاء متابعة</option>
+                    <option value="set_customer_status">تغيير حالة العميل</option>
+                    <option value="add_tag">إضافة tag</option>
+                    <option value="handoff">تحويل لموظف</option>
+                    <option value="send_message">إرسال رسالة بضوابط</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Action Payload JSON</label>
+                <textarea name="action_payload" dir="ltr">{"title":"متابعة تلقائية","due_in_minutes":1440}</textarea>
+            </div>
+            <div class="form-group"><label>Priority</label><input type="number" name="priority" value="100"></div>
+            <div class="form-group"><label>Cooldown Minutes</label><input type="number" name="cooldown_minutes" value="60"></div>
+            <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px"><input type="checkbox" name="enabled"> تفعيل الآن</label>
+            <button class="btn btn-primary">إنشاء</button>
+        </form>
+    </section>
+
+    <section class="detail-card">
+        <h2>القواعد</h2>
+        <table>
+            <thead><tr><th>الاسم</th><th>Trigger</th><th>Condition</th><th>Action</th><th>Enabled</th><th>Cooldown</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for rule in rules %}
+                <tr>
+                    <td>{{ rule.name }}</td>
+                    <td>{{ rule.trigger }}</td>
+                    <td>{{ rule.condition_type }}: {{ rule.condition_value or '-' }}</td>
+                    <td>{{ rule.action_type }}</td>
+                    <td>{{ 'نعم' if rule.enabled else 'لا' }}</td>
+                    <td>{{ rule.cooldown_minutes }}m</td>
+                    <td><form method="post" action="/automation/{{ rule.id }}/toggle"><button class="btn btn-small">{{ 'إيقاف' if rule.enabled else 'تفعيل' }}</button></form></td>
+                </tr>
+                {% endfor %}
+                {% if not rules %}<tr><td colspan="7" class="text-center text-muted" style="padding:40px">لا توجد قواعد</td></tr>{% endif %}
+            </tbody>
+        </table>
+    </section>
+</div>
+
+<div class="detail-card">
+    <h2>آخر Automation Logs</h2>
+    <table>
+        <thead><tr><th>الوقت</th><th>Rule</th><th>Trigger</th><th>Result</th><th>Message</th></tr></thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{{ log.rule.name if log.rule else log.rule_id[:8] }}</td>
+                <td>{{ log.trigger }}</td>
+                <td>{{ 'skipped' if log.skipped else ('success' if log.success else 'failed') }}</td>
+                <td>{{ log.message or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .automation-layout { display:grid; grid-template-columns:360px 1fr; gap:20px; align-items:start; }
+    .automation-form { position:sticky; top:20px; }
+    @media (max-width: 900px) { .automation-layout { grid-template-columns:1fr; } .automation-form { position:static; } }
+</style>
+{% endblock %}
