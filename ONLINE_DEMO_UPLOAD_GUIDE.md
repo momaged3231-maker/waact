@@ -63,6 +63,14 @@ gh auth login
 
 ثم شغل `UPLOAD_TO_GITHUB.bat` مرة ثانية.
 
+لو ظهر خطأ `fetch first` أو `remote contains work that you do not have locally`:
+
+النسخة الجديدة من `UPLOAD_TO_GITHUB.bat` ستعمل pull من GitHub تلقائيًا قبل push. شغل الملف مرة ثانية، وسيحاول دمج commit الموجود على GitHub مثل README أو initial commit.
+
+لو ظهر Conflict:
+
+ابعثلي النص الظاهر كاملًا، ولا تستخدم force push.
+
 ## 4. جهز Supabase
 
 1. افتح Supabase.

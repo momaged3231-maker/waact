@@ -115,7 +115,24 @@ if errorlevel 1 (
 )
 
 echo.
-echo Step 8: Pushing to GitHub...
+echo Step 8: Syncing with GitHub before push...
+git ls-remote --exit-code --heads origin main >nul 2>nul
+if errorlevel 1 (
+    echo Remote branch main does not exist yet - first push will create it.
+) else (
+    echo Remote branch main exists. Pulling remote updates first...
+    git pull --rebase --autostash origin main
+    if errorlevel 1 (
+        echo.
+        echo Rebase pull failed. Trying safe merge for existing GitHub README/initial commit...
+        git rebase --abort >nul 2>nul
+        git pull --no-rebase --allow-unrelated-histories --no-edit origin main
+        if errorlevel 1 goto pullfail
+    )
+)
+
+echo.
+echo Step 9: Pushing to GitHub...
 git push -u origin main
 if errorlevel 1 goto pushfail
 
@@ -127,12 +144,24 @@ echo ============================================
 pause
 exit /b 0
 
+:pullfail
+echo.
+echo Pull failed because GitHub has changes that could not be merged automatically.
+echo Open the files marked as conflicts, fix them, then run:
+echo   git add .
+echo   git commit -m "Resolve GitHub sync conflicts"
+echo   git push -u origin main
+echo.
+echo If you do not know how to resolve the conflict, send me the full output above.
+pause
+exit /b 1
+
 :pushfail
 echo.
 echo Push failed.
-echo If GitHub asks for login, install GitHub CLI and run: gh auth login
+echo If the error says authentication failed, run: gh auth login
+echo If the error says rejected/fetch first, run this script again after the pull step above completes.
 echo Or push from GitHub Desktop.
-echo Then run this script again.
 pause
 exit /b 1
 
